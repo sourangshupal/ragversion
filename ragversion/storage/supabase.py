@@ -1,0 +1,628 @@
+"""Supabase storage backend implementation."""
+
+import gzip
+import json
+import os
+from datetime import datetime, timedelta
+from typing import List, Optional
+from uuid import UUID
+
+from supabase import create_client, Client
+from ragversion.exceptions import StorageError, DocumentNotFoundError, VersionNotFoundError
+from ragversion.models import Document, Version, DiffResult
+from ragversion.storage.base import BaseStorage
+
+
+class SupabaseStorage(BaseStorage):
+    """Supabase storage backend with async support."""
+
+    def __init__(
+        self,
+        url: str,
+        key: str,
+        content_compression: bool = True,
+        timeout: int = 30,
+    ):
+        """
+        Initialize Supabase storage.
+
+        Args:
+            url: Supabase project URL
+            key: Supabase service key
+            content_compression: Whether to compress content with gzip
+            timeout: Request timeout in seconds
+        """
+        self.url = url
+        self.key = key
+        self.content_compression = content_compression
+        self.timeout = timeout
+        self.client: Optional[Client] = None
+
+    @classmethod
+    def from_env(cls) -> "SupabaseStorage":
+        """Create SupabaseStorage from environment variables."""
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_SERVICE_KEY")
+
+        if not url or not key:
+            raise StorageError(
+                "SUPABASE_URL and SUPABASE_SERVICE_KEY environment variables must be set"
+            )
+
+        return cls(url=url, key=key)
+
+    async def initialize(self) -> None:
+        """Initialize the Supabase client and ensure tables exist."""
+        try:
+            self.client = create_client(self.url, self.key)
+            # Run migrations to ensure tables exist
+            await self._ensure_tables()
+        except Exception as e:
+            raise StorageError("Failed to initialize Supabase storage", e)
+
+    async def close(self) -> None:
+        """Close Supabase client connections."""
+        # Supabase Python client doesn't require explicit closing
+        self.client = None
+
+    async def health_check(self) -> bool:
+        """Check if Supabase is accessible."""
+        try:
+            if not self.client:
+                return False
+            # Try a simple query
+            self.client.table("documents").select("id").limit(1).execute()
+            return True
+        except Exception:
+            return False
+
+    async def _ensure_tables(self) -> None:
+        """Ensure required tables exist. Note: This assumes tables are created via Supabase migrations."""
+        # In production, tables should be created via Supabase migrations
+        # This is a placeholder for checking table existence
+        pass
+
+    def _ensure_client(self) -> Client:
+        """Ensure client is initialized."""
+        if not self.client:
+            raise StorageError("Storage not initialized. Call initialize() first.")
+        return self.client
+
+    # Document operations
+
+    async def create_document(self, document: Document) -> Document:
+        """Create a new document record."""
+        try:
+            client = self._ensure_client()
+            data = {
+                "id": str(document.id),
+                "file_path": document.file_path,
+                "file_name": document.file_name,
+                "file_type": document.file_type,
+                "file_size": document.file_size,
+                "content_hash": document.content_hash,
+                "created_at": document.created_at.isoformat(),
+                "updated_at": document.updated_at.isoformat(),
+                "version_count": document.version_count,
+                "current_version": document.current_version,
+                "metadata": json.dumps(document.metadata),
+            }
+            result = client.table("documents").insert(data).execute()
+            if not result.data:
+                raise StorageError("Failed to create document")
+            return document
+        except Exception as e:
+            raise StorageError(f"Failed to create document: {document.file_path}", e)
+
+    async def get_document(self, document_id: UUID) -> Optional[Document]:
+        """Get a document by ID."""
+        try:
+            client = self._ensure_client()
+            result = client.table("documents").select("*").eq("id", str(document_id)).execute()
+
+            if not result.data:
+                return None
+
+            data = result.data[0]
+            return Document(
+                id=UUID(data["id"]),
+                file_path=data["file_path"],
+                file_name=data["file_name"],
+                file_type=data["file_type"],
+                file_size=data["file_size"],
+                content_hash=data["content_hash"],
+                created_at=datetime.fromisoformat(data["created_at"]),
+                updated_at=datetime.fromisoformat(data["updated_at"]),
+                version_count=data["version_count"],
+                current_version=data["current_version"],
+                metadata=json.loads(data["metadata"]) if data.get("metadata") else {},
+            )
+        except Exception as e:
+            raise StorageError(f"Failed to get document: {document_id}", e)
+
+    async def get_document_by_path(self, file_path: str) -> Optional[Document]:
+        """Get a document by file path."""
+        try:
+            client = self._ensure_client()
+            result = client.table("documents").select("*").eq("file_path", file_path).execute()
+
+            if not result.data:
+                return None
+
+            data = result.data[0]
+            return Document(
+                id=UUID(data["id"]),
+                file_path=data["file_path"],
+                file_name=data["file_name"],
+                file_type=data["file_type"],
+                file_size=data["file_size"],
+                content_hash=data["content_hash"],
+                created_at=datetime.fromisoformat(data["created_at"]),
+                updated_at=datetime.fromisoformat(data["updated_at"]),
+                version_count=data["version_count"],
+                current_version=data["current_version"],
+                metadata=json.loads(data["metadata"]) if data.get("metadata") else {},
+            )
+        except Exception as e:
+            raise StorageError(f"Failed to get document by path: {file_path}", e)
+
+    async def update_document(self, document: Document) -> Document:
+        """Update an existing document."""
+        try:
+            client = self._ensure_client()
+            data = {
+                "file_path": document.file_path,
+                "file_name": document.file_name,
+                "file_type": document.file_type,
+                "file_size": document.file_size,
+                "content_hash": document.content_hash,
+                "updated_at": datetime.utcnow().isoformat(),
+                "version_count": document.version_count,
+                "current_version": document.current_version,
+                "metadata": json.dumps(document.metadata),
+            }
+            result = (
+                client.table("documents").update(data).eq("id", str(document.id)).execute()
+            )
+
+            if not result.data:
+                raise DocumentNotFoundError(str(document.id))
+
+            return document
+        except Exception as e:
+            raise StorageError(f"Failed to update document: {document.id}", e)
+
+    async def delete_document(self, document_id: UUID) -> None:
+        """Delete a document and all its versions."""
+        try:
+            client = self._ensure_client()
+            # Delete all versions first
+            client.table("versions").delete().eq("document_id", str(document_id)).execute()
+            # Delete content
+            client.table("content_snapshots").delete().eq("document_id", str(document_id)).execute()
+            # Delete document
+            client.table("documents").delete().eq("id", str(document_id)).execute()
+        except Exception as e:
+            raise StorageError(f"Failed to delete document: {document_id}", e)
+
+    async def list_documents(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        order_by: str = "updated_at",
+    ) -> List[Document]:
+        """List documents with pagination."""
+        try:
+            client = self._ensure_client()
+            result = (
+                client.table("documents")
+                .select("*")
+                .order(order_by, desc=True)
+                .range(offset, offset + limit - 1)
+                .execute()
+            )
+
+            documents = []
+            for data in result.data:
+                documents.append(
+                    Document(
+                        id=UUID(data["id"]),
+                        file_path=data["file_path"],
+                        file_name=data["file_name"],
+                        file_type=data["file_type"],
+                        file_size=data["file_size"],
+                        content_hash=data["content_hash"],
+                        created_at=datetime.fromisoformat(data["created_at"]),
+                        updated_at=datetime.fromisoformat(data["updated_at"]),
+                        version_count=data["version_count"],
+                        current_version=data["current_version"],
+                        metadata=json.loads(data["metadata"]) if data.get("metadata") else {},
+                    )
+                )
+            return documents
+        except Exception as e:
+            raise StorageError("Failed to list documents", e)
+
+    async def search_documents(
+        self,
+        metadata_filter: Optional[dict] = None,
+        file_type: Optional[str] = None,
+    ) -> List[Document]:
+        """Search documents by metadata or file type."""
+        try:
+            client = self._ensure_client()
+            query = client.table("documents").select("*")
+
+            if file_type:
+                query = query.eq("file_type", file_type)
+
+            # Note: Metadata filtering requires JSONB support in Supabase
+            # This is a simplified implementation
+            result = query.execute()
+
+            documents = []
+            for data in result.data:
+                doc_metadata = json.loads(data.get("metadata", "{}"))
+
+                # Filter by metadata if provided
+                if metadata_filter:
+                    matches = all(
+                        doc_metadata.get(k) == v for k, v in metadata_filter.items()
+                    )
+                    if not matches:
+                        continue
+
+                documents.append(
+                    Document(
+                        id=UUID(data["id"]),
+                        file_path=data["file_path"],
+                        file_name=data["file_name"],
+                        file_type=data["file_type"],
+                        file_size=data["file_size"],
+                        content_hash=data["content_hash"],
+                        created_at=datetime.fromisoformat(data["created_at"]),
+                        updated_at=datetime.fromisoformat(data["updated_at"]),
+                        version_count=data["version_count"],
+                        current_version=data["current_version"],
+                        metadata=doc_metadata,
+                    )
+                )
+            return documents
+        except Exception as e:
+            raise StorageError("Failed to search documents", e)
+
+    # Version operations
+
+    async def create_version(self, version: Version) -> Version:
+        """Create a new version record."""
+        try:
+            client = self._ensure_client()
+            data = {
+                "id": str(version.id),
+                "document_id": str(version.document_id),
+                "version_number": version.version_number,
+                "content_hash": version.content_hash,
+                "file_size": version.file_size,
+                "change_type": version.change_type.value,
+                "created_at": version.created_at.isoformat(),
+                "created_by": version.created_by,
+                "metadata": json.dumps(version.metadata),
+            }
+            result = client.table("versions").insert(data).execute()
+
+            if not result.data:
+                raise StorageError("Failed to create version")
+
+            # Store content if provided
+            if version.content:
+                await self.store_content(
+                    version.id, version.content, compress=self.content_compression
+                )
+
+            return version
+        except Exception as e:
+            raise StorageError(f"Failed to create version for document {version.document_id}", e)
+
+    async def get_version(self, version_id: UUID) -> Optional[Version]:
+        """Get a version by ID."""
+        try:
+            client = self._ensure_client()
+            result = client.table("versions").select("*").eq("id", str(version_id)).execute()
+
+            if not result.data:
+                return None
+
+            data = result.data[0]
+            return Version(
+                id=UUID(data["id"]),
+                document_id=UUID(data["document_id"]),
+                version_number=data["version_number"],
+                content_hash=data["content_hash"],
+                file_size=data["file_size"],
+                change_type=data["change_type"],
+                created_at=datetime.fromisoformat(data["created_at"]),
+                created_by=data.get("created_by"),
+                metadata=json.loads(data["metadata"]) if data.get("metadata") else {},
+            )
+        except Exception as e:
+            raise StorageError(f"Failed to get version: {version_id}", e)
+
+    async def get_version_by_number(
+        self, document_id: UUID, version_number: int
+    ) -> Optional[Version]:
+        """Get a specific version of a document."""
+        try:
+            client = self._ensure_client()
+            result = (
+                client.table("versions")
+                .select("*")
+                .eq("document_id", str(document_id))
+                .eq("version_number", version_number)
+                .execute()
+            )
+
+            if not result.data:
+                return None
+
+            data = result.data[0]
+            return Version(
+                id=UUID(data["id"]),
+                document_id=UUID(data["document_id"]),
+                version_number=data["version_number"],
+                content_hash=data["content_hash"],
+                file_size=data["file_size"],
+                change_type=data["change_type"],
+                created_at=datetime.fromisoformat(data["created_at"]),
+                created_by=data.get("created_by"),
+                metadata=json.loads(data["metadata"]) if data.get("metadata") else {},
+            )
+        except Exception as e:
+            raise StorageError(
+                f"Failed to get version {version_number} for document {document_id}", e
+            )
+
+    async def list_versions(
+        self,
+        document_id: UUID,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Version]:
+        """List all versions of a document."""
+        try:
+            client = self._ensure_client()
+            result = (
+                client.table("versions")
+                .select("*")
+                .eq("document_id", str(document_id))
+                .order("version_number", desc=True)
+                .range(offset, offset + limit - 1)
+                .execute()
+            )
+
+            versions = []
+            for data in result.data:
+                versions.append(
+                    Version(
+                        id=UUID(data["id"]),
+                        document_id=UUID(data["document_id"]),
+                        version_number=data["version_number"],
+                        content_hash=data["content_hash"],
+                        file_size=data["file_size"],
+                        change_type=data["change_type"],
+                        created_at=datetime.fromisoformat(data["created_at"]),
+                        created_by=data.get("created_by"),
+                        metadata=json.loads(data["metadata"]) if data.get("metadata") else {},
+                    )
+                )
+            return versions
+        except Exception as e:
+            raise StorageError(f"Failed to list versions for document {document_id}", e)
+
+    async def delete_version(self, version_id: UUID) -> None:
+        """Delete a specific version."""
+        try:
+            client = self._ensure_client()
+            # Delete content first
+            await self.delete_content(version_id)
+            # Delete version
+            client.table("versions").delete().eq("id", str(version_id)).execute()
+        except Exception as e:
+            raise StorageError(f"Failed to delete version: {version_id}", e)
+
+    async def get_latest_version(self, document_id: UUID) -> Optional[Version]:
+        """Get the latest version of a document."""
+        try:
+            client = self._ensure_client()
+            result = (
+                client.table("versions")
+                .select("*")
+                .eq("document_id", str(document_id))
+                .order("version_number", desc=True)
+                .limit(1)
+                .execute()
+            )
+
+            if not result.data:
+                return None
+
+            data = result.data[0]
+            return Version(
+                id=UUID(data["id"]),
+                document_id=UUID(data["document_id"]),
+                version_number=data["version_number"],
+                content_hash=data["content_hash"],
+                file_size=data["file_size"],
+                change_type=data["change_type"],
+                created_at=datetime.fromisoformat(data["created_at"]),
+                created_by=data.get("created_by"),
+                metadata=json.loads(data["metadata"]) if data.get("metadata") else {},
+            )
+        except Exception as e:
+            raise StorageError(f"Failed to get latest version for document {document_id}", e)
+
+    # Content operations
+
+    async def store_content(
+        self,
+        version_id: UUID,
+        content: str,
+        compress: bool = True,
+    ) -> None:
+        """Store version content (optionally compressed)."""
+        try:
+            client = self._ensure_client()
+
+            # Compress content if enabled
+            content_data = content.encode("utf-8")
+            if compress:
+                content_data = gzip.compress(content_data)
+
+            data = {
+                "version_id": str(version_id),
+                "content": content_data.hex(),  # Store as hex string
+                "compressed": compress,
+                "created_at": datetime.utcnow().isoformat(),
+            }
+
+            client.table("content_snapshots").insert(data).execute()
+        except Exception as e:
+            raise StorageError(f"Failed to store content for version {version_id}", e)
+
+    async def get_content(self, version_id: UUID) -> Optional[str]:
+        """Retrieve version content (automatically decompressed)."""
+        try:
+            client = self._ensure_client()
+            result = (
+                client.table("content_snapshots")
+                .select("*")
+                .eq("version_id", str(version_id))
+                .execute()
+            )
+
+            if not result.data:
+                return None
+
+            data = result.data[0]
+            content_data = bytes.fromhex(data["content"])
+
+            # Decompress if needed
+            if data.get("compressed", False):
+                content_data = gzip.decompress(content_data)
+
+            return content_data.decode("utf-8")
+        except Exception as e:
+            raise StorageError(f"Failed to get content for version {version_id}", e)
+
+    async def delete_content(self, version_id: UUID) -> None:
+        """Delete stored content for a version."""
+        try:
+            client = self._ensure_client()
+            client.table("content_snapshots").delete().eq("version_id", str(version_id)).execute()
+        except Exception as e:
+            raise StorageError(f"Failed to delete content for version {version_id}", e)
+
+    # Diff operations
+
+    async def compute_diff(
+        self,
+        document_id: UUID,
+        from_version: int,
+        to_version: int,
+    ) -> Optional[DiffResult]:
+        """Compute diff between two versions."""
+        try:
+            # Get both versions
+            from_ver = await self.get_version_by_number(document_id, from_version)
+            to_ver = await self.get_version_by_number(document_id, to_version)
+
+            if not from_ver or not to_ver:
+                return None
+
+            # Get content for both versions
+            from_content = await self.get_content(from_ver.id)
+            to_content = await self.get_content(to_ver.id)
+
+            if not from_content or not to_content:
+                return None
+
+            # Simple diff implementation (can be enhanced with difflib)
+            from_lines = from_content.splitlines()
+            to_lines = to_content.splitlines()
+
+            # Basic line-by-line comparison
+            import difflib
+
+            diff = difflib.unified_diff(from_lines, to_lines, lineterm="")
+            diff_text = "\n".join(diff)
+
+            # Count additions and deletions
+            additions = sum(1 for line in diff_text.split("\n") if line.startswith("+"))
+            deletions = sum(1 for line in diff_text.split("\n") if line.startswith("-"))
+
+            return DiffResult(
+                document_id=document_id,
+                from_version=from_version,
+                to_version=to_version,
+                diff_text=diff_text,
+                additions=additions,
+                deletions=deletions,
+                from_hash=from_ver.content_hash,
+                to_hash=to_ver.content_hash,
+            )
+        except Exception as e:
+            raise StorageError(
+                f"Failed to compute diff for document {document_id} versions {from_version} to {to_version}",
+                e,
+            )
+
+    # Cleanup operations
+
+    async def cleanup_old_versions(
+        self,
+        document_id: UUID,
+        keep_count: int = 10,
+    ) -> int:
+        """Delete old versions, keeping only the most recent ones."""
+        try:
+            client = self._ensure_client()
+
+            # Get all versions
+            versions = await self.list_versions(document_id, limit=1000)
+
+            if len(versions) <= keep_count:
+                return 0
+
+            # Delete oldest versions
+            versions_to_delete = versions[keep_count:]
+            for version in versions_to_delete:
+                await self.delete_version(version.id)
+
+            return len(versions_to_delete)
+        except Exception as e:
+            raise StorageError(
+                f"Failed to cleanup old versions for document {document_id}", e
+            )
+
+    async def cleanup_by_age(self, days: int) -> int:
+        """Delete versions older than specified days."""
+        try:
+            client = self._ensure_client()
+            cutoff_date = datetime.utcnow() - timedelta(days=days)
+
+            # Get old versions
+            result = (
+                client.table("versions")
+                .select("*")
+                .lt("created_at", cutoff_date.isoformat())
+                .execute()
+            )
+
+            count = 0
+            for data in result.data:
+                version_id = UUID(data["id"])
+                await self.delete_version(version_id)
+                count += 1
+
+            return count
+        except Exception as e:
+            raise StorageError(f"Failed to cleanup versions older than {days} days", e)

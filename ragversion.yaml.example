@@ -1,0 +1,42 @@
+# RAGVersion Configuration Example
+# Copy this file to ragversion.yaml and customize
+
+# Storage backend configuration
+storage:
+  backend: supabase
+  supabase:
+    # Use environment variables or specify directly
+    url: ${SUPABASE_URL}
+    key: ${SUPABASE_SERVICE_KEY}
+    connection_pool_size: 10
+    timeout_seconds: 30
+
+# Document tracking configuration
+tracking:
+  store_content: true
+  max_file_size_mb: 50
+  hash_algorithm: sha256
+
+  # Batch processing options
+  batch:
+    max_workers: 4
+    chunk_size: 100
+    on_error: continue  # continue | stop
+
+  # Content storage
+  content:
+    compression: gzip  # gzip | none
+    ttl_days: 365  # Auto-delete after 1 year
+
+# Async configuration
+async:
+  enabled: true
+  callback_timeout: 60  # seconds
+  callback_mode: sequential  # sequential | parallel
+
+# Error handling
+error_handling:
+  continue_on_parse_error: true
+  max_retries: 3
+  retry_backoff: exponential  # exponential | linear
+  log_errors: true
