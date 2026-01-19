@@ -243,6 +243,15 @@ This comprehensive guide covers:
 - Troubleshooting
 - Architecture deep dive
 
+🚀 **Future roadmap available in [future-enhancements.md](future-enhancements.md)**
+
+See what's planned for RAGVersion:
+- New framework integrations (Haystack, Weaviate, DSPy, etc.)
+- Storage backend expansions (SQLite, MongoDB, Redis, cloud storage)
+- Advanced document parsers (OCR, HTML, code files, audio transcription)
+- Enterprise features (multi-tenancy, RBAC, audit logging)
+- Performance optimizations and security enhancements
+
 ## Requirements
 
 - Python 3.9+
