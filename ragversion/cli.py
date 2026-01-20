@@ -597,7 +597,7 @@ async def stats(document_id: Optional[str], config: Optional[str], format: str):
 @main.command()
 @click.option("--config", "-c", help="Path to config file")
 @click.option("--host", default="0.0.0.0", help="Host to bind to")
-@click.option("--port", "-p", default=8000, type=int, help="Port to bind to")
+@click.option("--port", "-p", default=6699, type=int, help="Port to bind to")
 @click.option("--reload", is_flag=True, help="Enable auto-reload for development")
 @async_command
 async def serve(config: Optional[str], host: str, port: int, reload: bool):
@@ -609,7 +609,7 @@ async def serve(config: Optional[str], host: str, port: int, reload: bool):
 
     Examples:
 
-        # Start server with defaults (localhost:8000)
+        # Start server with defaults (localhost:6699)
         ragversion serve
 
         # Start on custom port
@@ -622,10 +622,10 @@ async def serve(config: Optional[str], host: str, port: int, reload: bool):
         ragversion serve --host 0.0.0.0 --port 8080
 
     Once started, you can access:
-        - Web UI: http://localhost:8000/
-        - API docs: http://localhost:8000/api/docs
-        - ReDoc: http://localhost:8000/api/redoc
-        - Health check: http://localhost:8000/api/health
+        - Web UI: http://localhost:6699/
+        - API docs: http://localhost:6699/api/docs
+        - ReDoc: http://localhost:6699/api/redoc
+        - Health check: http://localhost:6699/api/health
     """
     try:
         import uvicorn

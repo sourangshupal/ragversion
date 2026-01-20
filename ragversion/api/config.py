@@ -9,7 +9,7 @@ class APIConfig(BaseSettings):
     """FastAPI server configuration."""
 
     host: str = Field(default="0.0.0.0", description="Host to bind to")
-    port: int = Field(default=8000, description="Port to bind to")
+    port: int = Field(default=6699, description="Port to bind to")
     reload: bool = Field(default=False, description="Enable auto-reload")
     workers: int = Field(default=1, description="Number of worker processes")
 

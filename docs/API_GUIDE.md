@@ -33,7 +33,7 @@ This installs:
 Start the API server using the CLI:
 
 ```bash
-# Default: http://0.0.0.0:8000
+# Default: http://0.0.0.0:6699
 ragversion serve
 
 # Custom host and port
@@ -47,10 +47,10 @@ ragversion serve --reload
 
 Once the server is running, access:
 
-- **Swagger UI**: http://localhost:8000/api/docs
-- **ReDoc**: http://localhost:8000/api/redoc
-- **OpenAPI JSON**: http://localhost:8000/api/openapi.json
-- **Health Check**: http://localhost:8000/api/health
+- **Swagger UI**: http://localhost:6699/api/docs
+- **ReDoc**: http://localhost:6699/api/redoc
+- **OpenAPI JSON**: http://localhost:6699/api/openapi.json
+- **Health Check**: http://localhost:6699/api/health
 
 ---
 
@@ -91,7 +91,7 @@ ragversion serve --config ragversion.yaml
 Include the API key in the `X-API-Key` header:
 
 ```bash
-curl -H "X-API-Key: your-secret-key-1" http://localhost:8000/api/documents
+curl -H "X-API-Key: your-secret-key-1" http://localhost:6699/api/documents
 ```
 
 ---
@@ -132,7 +132,7 @@ List all documents with pagination and sorting.
 
 **Example:**
 ```bash
-curl "http://localhost:8000/api/documents?limit=10&offset=0&order_by=updated_at"
+curl "http://localhost:6699/api/documents?limit=10&offset=0&order_by=updated_at"
 ```
 
 **Response:**
@@ -164,7 +164,7 @@ Retrieve a specific document by UUID.
 
 **Example:**
 ```bash
-curl "http://localhost:8000/api/documents/123e4567-e89b-12d3-a456-426614174000"
+curl "http://localhost:6699/api/documents/123e4567-e89b-12d3-a456-426614174000"
 ```
 
 **Response:** Same as document object above.
@@ -182,7 +182,7 @@ Retrieve a document by its file path.
 
 **Example:**
 ```bash
-curl "http://localhost:8000/api/documents/path/docs/guide.pdf"
+curl "http://localhost:6699/api/documents/path/docs/guide.pdf"
 ```
 
 **Response:** Same as document object.
@@ -208,7 +208,7 @@ Search documents by file type and metadata filters.
 
 **Example:**
 ```bash
-curl -X POST http://localhost:8000/api/documents/search \
+curl -X POST http://localhost:6699/api/documents/search \
   -H "Content-Type: application/json" \
   -d '{
     "file_type": "pdf",
@@ -228,7 +228,7 @@ Delete a document and all its versions.
 
 **Example:**
 ```bash
-curl -X DELETE "http://localhost:8000/api/documents/123e4567-e89b-12d3-a456-426614174000"
+curl -X DELETE "http://localhost:6699/api/documents/123e4567-e89b-12d3-a456-426614174000"
 ```
 
 **Response:** 204 No Content
@@ -250,7 +250,7 @@ Get top documents by version count or other criteria.
 
 **Example:**
 ```bash
-curl "http://localhost:8000/api/documents/top/by-version-count?limit=5"
+curl "http://localhost:6699/api/documents/top/by-version-count?limit=5"
 ```
 
 **Response:** Array of document objects sorted by criteria.
@@ -267,7 +267,7 @@ Retrieve a specific version by UUID.
 
 **Example:**
 ```bash
-curl "http://localhost:8000/api/versions/789e4567-e89b-12d3-a456-426614174001"
+curl "http://localhost:6699/api/versions/789e4567-e89b-12d3-a456-426614174001"
 ```
 
 **Response:**
@@ -299,7 +299,7 @@ Get version history for a specific document.
 
 **Example:**
 ```bash
-curl "http://localhost:8000/api/versions/document/123e4567-e89b-12d3-a456-426614174000?limit=10"
+curl "http://localhost:6699/api/versions/document/123e4567-e89b-12d3-a456-426614174000?limit=10"
 ```
 
 **Response:** Array of version objects.
@@ -314,7 +314,7 @@ Get a specific version of a document by version number.
 
 **Example:**
 ```bash
-curl "http://localhost:8000/api/versions/document/123e4567-e89b-12d3-a456-426614174000/number/3"
+curl "http://localhost:6699/api/versions/document/123e4567-e89b-12d3-a456-426614174000/number/3"
 ```
 
 **Response:** Version object.
@@ -329,7 +329,7 @@ Get the most recent version of a document.
 
 **Example:**
 ```bash
-curl "http://localhost:8000/api/versions/document/123e4567-e89b-12d3-a456-426614174000/latest"
+curl "http://localhost:6699/api/versions/document/123e4567-e89b-12d3-a456-426614174000/latest"
 ```
 
 **Response:** Version object.
@@ -344,7 +344,7 @@ Get the actual content of a specific version.
 
 **Example:**
 ```bash
-curl "http://localhost:8000/api/versions/789e4567-e89b-12d3-a456-426614174001/content"
+curl "http://localhost:6699/api/versions/789e4567-e89b-12d3-a456-426614174001/content"
 ```
 
 **Response:** Plain text content of the version.
@@ -368,7 +368,7 @@ Restore a document to a specific version.
 
 **Example:**
 ```bash
-curl -X POST http://localhost:8000/api/versions/restore \
+curl -X POST http://localhost:6699/api/versions/restore \
   -H "Content-Type: application/json" \
   -d '{
     "document_id": "123e4567-e89b-12d3-a456-426614174000",
@@ -402,7 +402,7 @@ Compare two versions of a document.
 
 **Example:**
 ```bash
-curl "http://localhost:8000/api/versions/document/123e4567-e89b-12d3-a456-426614174000/diff/2/4"
+curl "http://localhost:6699/api/versions/document/123e4567-e89b-12d3-a456-426614174000/diff/2/4"
 ```
 
 **Response:**
@@ -442,7 +442,7 @@ Track changes to a single file.
 
 **Example:**
 ```bash
-curl -X POST http://localhost:8000/api/track/file \
+curl -X POST http://localhost:6699/api/track/file \
   -H "Content-Type: application/json" \
   -d '{
     "file_path": "/path/to/document.pdf",
@@ -493,7 +493,7 @@ Track all files in a directory with optional pattern matching.
 
 **Example:**
 ```bash
-curl -X POST http://localhost:8000/api/track/directory \
+curl -X POST http://localhost:6699/api/track/directory \
   -H "Content-Type: application/json" \
   -d '{
     "dir_path": "/path/to/documents",
@@ -549,7 +549,7 @@ Get overall storage statistics.
 
 **Example:**
 ```bash
-curl "http://localhost:8000/api/statistics?days=7"
+curl "http://localhost:6699/api/statistics?days=7"
 ```
 
 **Response:**
@@ -580,7 +580,7 @@ Get detailed statistics for a specific document.
 
 **Example:**
 ```bash
-curl "http://localhost:8000/api/statistics/document/123e4567-e89b-12d3-a456-426614174000"
+curl "http://localhost:6699/api/statistics/document/123e4567-e89b-12d3-a456-426614174000"
 ```
 
 **Response:**
@@ -663,7 +663,7 @@ curl "http://localhost:8000/api/statistics/document/123e4567-e89b-12d3-a456-4266
 ```python
 import requests
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:6699"
 
 # Track a file
 response = requests.post(
@@ -695,7 +695,7 @@ for v in versions:
 ### JavaScript with fetch
 
 ```javascript
-const BASE_URL = "http://localhost:8000";
+const BASE_URL = "http://localhost:6699";
 
 // Track a file
 async function trackFile(filePath) {
@@ -726,7 +726,7 @@ async function getStats() {
 
 ```bash
 # Track directory
-curl -X POST http://localhost:8000/api/track/directory \
+curl -X POST http://localhost:6699/api/track/directory \
   -H "Content-Type: application/json" \
   -d '{
     "dir_path": "/docs",
@@ -735,10 +735,10 @@ curl -X POST http://localhost:8000/api/track/directory \
   }'
 
 # Get diff between versions
-curl "http://localhost:8000/api/versions/document/<doc-id>/diff/1/3"
+curl "http://localhost:6699/api/versions/document/<doc-id>/diff/1/3"
 
 # Restore version
-curl -X POST http://localhost:8000/api/versions/restore \
+curl -X POST http://localhost:6699/api/versions/restore \
   -H "Content-Type: application/json" \
   -d '{
     "document_id": "<doc-id>",
@@ -746,7 +746,7 @@ curl -X POST http://localhost:8000/api/versions/restore \
   }'
 
 # Search documents
-curl -X POST http://localhost:8000/api/documents/search \
+curl -X POST http://localhost:6699/api/documents/search \
   -H "Content-Type: application/json" \
   -d '{
     "file_type": "pdf",
@@ -799,10 +799,10 @@ Always paginate when listing resources:
 
 ```bash
 # Good
-curl "http://localhost:8000/api/documents?limit=100&offset=0"
+curl "http://localhost:6699/api/documents?limit=100&offset=0"
 
 # Avoid
-curl "http://localhost:8000/api/documents?limit=10000"
+curl "http://localhost:6699/api/documents?limit=10000"
 ```
 
 ### 2. Filter Early
@@ -811,7 +811,7 @@ Use search endpoints with filters instead of fetching all:
 
 ```bash
 # Good
-curl -X POST http://localhost:8000/api/documents/search \
+curl -X POST http://localhost:6699/api/documents/search \
   -d '{"file_type": "pdf"}'
 
 # Avoid
@@ -862,14 +862,14 @@ RUN pip install -e .[api]
 
 COPY . .
 
-CMD ["ragversion", "serve", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["ragversion", "serve", "--host", "0.0.0.0", "--port", "6699"]
 ```
 
 Build and run:
 
 ```bash
 docker build -t ragversion-api .
-docker run -p 8000:8000 ragversion-api
+docker run -p 6699:6699 ragversion-api
 ```
 
 ### Systemd Service
@@ -885,7 +885,7 @@ After=network.target
 Type=simple
 User=ragversion
 WorkingDirectory=/opt/ragversion
-ExecStart=/opt/ragversion/.venv/bin/ragversion serve --host 0.0.0.0 --port 8000
+ExecStart=/opt/ragversion/.venv/bin/ragversion serve --host 0.0.0.0 --port 6699
 Restart=on-failure
 
 [Install]

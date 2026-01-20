@@ -742,8 +742,8 @@ RAGVersion includes a simple, clean web interface perfect for content teams and 
 ragversion serve
 
 # Access the web interface
-# Dashboard: http://localhost:8000/
-# Documents: http://localhost:8000/documents
+# Dashboard: http://localhost:6699/
+# Documents: http://localhost:6699/documents
 ```
 
 **Web UI Features:**
@@ -820,7 +820,7 @@ ragversion serve --reload
 ```python
 import requests
 
-BASE_URL = "http://localhost:8000/api"
+BASE_URL = "http://localhost:6699/api"
 
 # Track a file
 response = requests.post(
@@ -845,7 +845,7 @@ stats = requests.get(
 
 **JavaScript:**
 ```javascript
-const BASE_URL = "http://localhost:8000/api";
+const BASE_URL = "http://localhost:6699/api";
 
 // Track a file
 const response = await fetch(
@@ -873,15 +873,15 @@ const versions = await fetch(
 **cURL Examples:**
 ```bash
 # Track directory
-curl -X POST http://localhost:8000/api/track/directory \
+curl -X POST http://localhost:6699/api/track/directory \
   -H "Content-Type: application/json" \
   -d '{"dir_path": "/docs", "patterns": ["*.md"]}'
 
 # Get diff between versions
-curl "http://localhost:8000/api/versions/document/<doc-id>/diff/1/3"
+curl "http://localhost:6699/api/versions/document/<doc-id>/diff/1/3"
 
 # Health check
-curl http://localhost:8000/api/health
+curl http://localhost:6699/api/health
 ```
 
 **API Endpoints:**

@@ -203,12 +203,12 @@ sync = LangChainSync(
 ragversion serve
 
 # Access web interface
-# Dashboard: http://localhost:8000/
-# Documents: http://localhost:8000/documents
+# Dashboard: http://localhost:6699/
+# Documents: http://localhost:6699/documents
 
 # Access API docs
-# Swagger: http://localhost:8000/api/docs
-# ReDoc: http://localhost:8000/api/redoc
+# Swagger: http://localhost:6699/api/docs
+# ReDoc: http://localhost:6699/api/redoc
 ```
 
 ### Technical Details
@@ -263,7 +263,7 @@ ragversion serve
 ### CLI Commands
 - `ragversion serve` - Start REST API server
   - `--host` - Bind host (default: 0.0.0.0)
-  - `--port` - Bind port (default: 8000)
+  - `--port` - Bind port (default: 6699)
   - `--reload` - Enable auto-reload for development
   - Displays API endpoint URLs on startup
   - Graceful shutdown handling
@@ -329,8 +329,8 @@ ragversion serve --port 5000
 ragversion serve --reload
 
 # Access documentation
-# Swagger UI: http://localhost:8000/docs
-# ReDoc: http://localhost:8000/redoc
+# Swagger UI: http://localhost:6699/docs
+# ReDoc: http://localhost:6699/redoc
 ```
 
 ### Benefits

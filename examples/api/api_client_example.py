@@ -22,7 +22,7 @@ import httpx
 class RAGVersionClient:
     """Synchronous client for RAGVersion API."""
 
-    def __init__(self, base_url: str = "http://localhost:8000/api", api_key: Optional[str] = None):
+    def __init__(self, base_url: str = "http://localhost:6699/api", api_key: Optional[str] = None):
         """Initialize client.
 
         Args:
@@ -278,7 +278,7 @@ class RAGVersionClient:
 class AsyncRAGVersionClient:
     """Asynchronous client for RAGVersion API."""
 
-    def __init__(self, base_url: str = "http://localhost:8000/api", api_key: Optional[str] = None):
+    def __init__(self, base_url: str = "http://localhost:6699/api", api_key: Optional[str] = None):
         """Initialize async client.
 
         Args:
@@ -329,7 +329,7 @@ def example_sync():
     print("=== Synchronous Client Example ===\n")
 
     # Initialize client
-    client = RAGVersionClient(base_url="http://localhost:8000/api")
+    client = RAGVersionClient(base_url="http://localhost:6699/api")
 
     # Health check
     print("1. Health Check")
@@ -398,7 +398,7 @@ async def example_async():
     print("=== Asynchronous Client Example ===\n")
 
     # Initialize async client
-    client = AsyncRAGVersionClient(base_url="http://localhost:8000/api")
+    client = AsyncRAGVersionClient(base_url="http://localhost:6699/api")
 
     # Concurrent requests
     print("1. Concurrent Requests")
