@@ -209,3 +209,95 @@ class DocumentStatistics(BaseModel):
             datetime: lambda v: v.isoformat(),
             UUID: lambda v: str(v),
         }
+
+
+# ============================================================================
+# Chunk-Level Versioning Models (v0.10.0)
+# ============================================================================
+
+
+class ChunkChangeType(str, Enum):
+    """Type of change detected in a chunk."""
+
+    ADDED = "added"
+    MODIFIED = "modified"
+    REMOVED = "removed"
+    UNCHANGED = "unchanged"
+    REORDERED = "reordered"
+
+
+class Chunk(BaseModel):
+    """Represents a content chunk within a document version."""
+
+    id: UUID = Field(default_factory=uuid4)
+    document_id: UUID = Field(..., description="ID of the parent document")
+    version_id: UUID = Field(..., description="ID of the version this chunk belongs to")
+    chunk_index: int = Field(..., description="0-indexed position within the document")
+    content_hash: str = Field(..., description="SHA-256 hash of chunk content")
+    token_count: int = Field(..., description="Number of tokens in this chunk")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Chunk metadata (may include content)")
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat(),
+            UUID: lambda v: str(v),
+        }
+
+
+class ChunkDiff(BaseModel):
+    """Result of comparing chunks between versions."""
+
+    document_id: UUID = Field(..., description="ID of the document")
+    from_version: int = Field(..., description="Source version number")
+    to_version: int = Field(..., description="Target version number")
+
+    added_chunks: List[Chunk] = Field(default_factory=list, description="Newly added chunks")
+    modified_chunks: List[tuple] = Field(default_factory=list, description="Modified chunks (old, new) pairs")
+    removed_chunks: List[Chunk] = Field(default_factory=list, description="Removed chunks")
+    unchanged_chunks: List[Chunk] = Field(default_factory=list, description="Chunks that remained the same")
+    reordered_chunks: List[Chunk] = Field(default_factory=list, description="Chunks that moved position")
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat(),
+            UUID: lambda v: str(v),
+        }
+
+    @property
+    def total_changes(self) -> int:
+        """Total number of chunks that changed (added + modified)."""
+        return len(self.added_chunks) + len(self.modified_chunks)
+
+    @property
+    def total_chunks(self) -> int:
+        """Total number of chunks in the new version."""
+        return (
+            len(self.added_chunks)
+            + len(self.modified_chunks)
+            + len(self.unchanged_chunks)
+            + len(self.reordered_chunks)
+        )
+
+    @property
+    def savings_percentage(self) -> float:
+        """Percentage of chunks that don't need re-embedding (unchanged + reordered)."""
+        if self.total_chunks == 0:
+            return 0.0
+        unchanged_count = len(self.unchanged_chunks) + len(self.reordered_chunks)
+        return (unchanged_count / self.total_chunks) * 100
+
+
+class ChunkingConfig(BaseModel):
+    """Configuration for chunking strategy."""
+
+    enabled: bool = Field(default=False, description="Enable chunk-level tracking (opt-in)")
+    chunk_size: int = Field(default=500, description="Target size per chunk (tokens or characters)")
+    chunk_overlap: int = Field(default=50, description="Overlap between chunks")
+    splitter_type: str = Field(default="recursive", description="Chunking strategy: recursive, semantic, etc.")
+    store_chunk_content: bool = Field(default=True, description="Store chunk content in database")
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat(),
+        }

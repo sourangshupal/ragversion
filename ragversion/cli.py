@@ -15,9 +15,35 @@ from rich.table import Table
 
 from ragversion import AsyncVersionTracker, __version__
 from ragversion.config import RAGVersionConfig
-from ragversion.storage import SupabaseStorage
+from ragversion.storage import SQLiteStorage, SupabaseStorage
+from ragversion.storage.base import BaseStorage
 
 console = Console()
+
+
+def get_storage(cfg: RAGVersionConfig) -> BaseStorage:
+    """Get storage backend based on configuration."""
+    if cfg.storage_backend == "sqlite":
+        if not cfg.sqlite:
+            rprint("[yellow]Warning:[/yellow] SQLite config not found, using defaults")
+            return SQLiteStorage()
+        return SQLiteStorage(
+            db_path=cfg.sqlite.db_path,
+            content_compression=cfg.sqlite.content_compression,
+            timeout=cfg.sqlite.timeout_seconds,
+        )
+    elif cfg.storage_backend == "supabase":
+        if not cfg.supabase:
+            rprint("[red]✗[/red] Supabase configuration not found")
+            sys.exit(1)
+        return SupabaseStorage(
+            url=cfg.supabase.url,
+            key=cfg.supabase.key,
+            timeout=cfg.supabase.timeout_seconds,
+        )
+    else:
+        rprint(f"[red]✗[/red] Unsupported storage backend: {cfg.storage_backend}")
+        sys.exit(1)
 
 
 def async_command(f):
@@ -62,9 +88,9 @@ def init(config: str):
 
         rprint(f"[green]✓[/green] Created config file: {config}")
         rprint("\n[bold]Next steps:[/bold]")
-        rprint("1. Edit ragversion.yaml with your Supabase credentials")
-        rprint("2. Run migrations: ragversion migrate")
-        rprint("3. Start tracking: ragversion track ./documents")
+        rprint("1. (Optional) Edit ragversion.yaml to configure storage backend")
+        rprint("2. Start tracking: ragversion track ./documents")
+        rprint("\n[dim]Note: By default, RAGVersion uses SQLite (zero configuration)[/dim]")
 
     except Exception as e:
         rprint(f"[red]✗[/red] Failed to initialize: {e}")
@@ -80,31 +106,29 @@ async def migrate(config: Optional[str]):
         # Load config
         cfg = RAGVersionConfig.load(config)
 
-        if not cfg.supabase:
-            rprint("[red]✗[/red] Supabase configuration not found")
-            sys.exit(1)
-
         # Initialize storage
-        storage = SupabaseStorage(
-            url=cfg.supabase.url,
-            key=cfg.supabase.key,
-        )
-
+        storage = get_storage(cfg)
         await storage.initialize()
 
-        # Show migration SQL
-        migration_file = Path(__file__).parent / "storage" / "migrations" / "001_initial_schema.sql"
+        if cfg.storage_backend == "sqlite":
+            rprint("[green]✓[/green] SQLite database initialized")
+            rprint(f"Database location: {cfg.sqlite.db_path if cfg.sqlite else 'ragversion.db'}")
+            rprint("\n[dim]SQLite migrations are applied automatically.[/dim]")
 
-        rprint("[bold]Database Migration[/bold]\n")
-        rprint("Run the following SQL in your Supabase SQL Editor:\n")
-        rprint(f"File: {migration_file}\n")
+        elif cfg.storage_backend == "supabase":
+            # Show migration SQL
+            migration_file = Path(__file__).parent / "storage" / "migrations" / "001_initial_schema.sql"
 
-        with open(migration_file, "r") as f:
-            sql = f.read()
-            rprint("[dim]" + sql[:500] + "...[/dim]\n")
+            rprint("[bold]Database Migration[/bold]\n")
+            rprint("Run the following SQL in your Supabase SQL Editor:\n")
+            rprint(f"File: {migration_file}\n")
 
-        rprint("[yellow]Note:[/yellow] Migrations should be run manually in Supabase SQL Editor")
-        rprint("Visit: https://supabase.com/dashboard/project/_/sql")
+            with open(migration_file, "r") as f:
+                sql = f.read()
+                rprint("[dim]" + sql[:500] + "...[/dim]\n")
+
+            rprint("[yellow]Note:[/yellow] Migrations should be run manually in Supabase SQL Editor")
+            rprint("Visit: https://supabase.com/dashboard/project/_/sql")
 
         await storage.close()
 
@@ -132,15 +156,8 @@ async def track(
         # Load config
         cfg = RAGVersionConfig.load(config)
 
-        if not cfg.supabase:
-            rprint("[red]✗[/red] Supabase configuration not found")
-            sys.exit(1)
-
         # Initialize tracker
-        storage = SupabaseStorage(
-            url=cfg.supabase.url,
-            key=cfg.supabase.key,
-        )
+        storage = get_storage(cfg)
 
         tracker = AsyncVersionTracker(
             storage=storage,
@@ -217,15 +234,8 @@ async def list(config: Optional[str], limit: int):
         # Load config
         cfg = RAGVersionConfig.load(config)
 
-        if not cfg.supabase:
-            rprint("[red]✗[/red] Supabase configuration not found")
-            sys.exit(1)
-
         # Initialize tracker
-        storage = SupabaseStorage(
-            url=cfg.supabase.url,
-            key=cfg.supabase.key,
-        )
+        storage = get_storage(cfg)
 
         tracker = AsyncVersionTracker(storage=storage)
         await tracker.initialize()
@@ -279,15 +289,8 @@ async def history(document_id: str, config: Optional[str]):
         # Load config
         cfg = RAGVersionConfig.load(config)
 
-        if not cfg.supabase:
-            rprint("[red]✗[/red] Supabase configuration not found")
-            sys.exit(1)
-
         # Initialize tracker
-        storage = SupabaseStorage(
-            url=cfg.supabase.url,
-            key=cfg.supabase.key,
-        )
+        storage = get_storage(cfg)
 
         tracker = AsyncVersionTracker(storage=storage)
         await tracker.initialize()
@@ -344,15 +347,8 @@ async def diff(document_id: str, from_version: int, to_version: int, config: Opt
         # Load config
         cfg = RAGVersionConfig.load(config)
 
-        if not cfg.supabase:
-            rprint("[red]✗[/red] Supabase configuration not found")
-            sys.exit(1)
-
         # Initialize tracker
-        storage = SupabaseStorage(
-            url=cfg.supabase.url,
-            key=cfg.supabase.key,
-        )
+        storage = get_storage(cfg)
 
         tracker = AsyncVersionTracker(storage=storage)
         await tracker.initialize()
@@ -387,15 +383,8 @@ async def health(config: Optional[str]):
         # Load config
         cfg = RAGVersionConfig.load(config)
 
-        if not cfg.supabase:
-            rprint("[red]✗[/red] Supabase configuration not found")
-            sys.exit(1)
-
         # Initialize storage
-        storage = SupabaseStorage(
-            url=cfg.supabase.url,
-            key=cfg.supabase.key,
-        )
+        storage = get_storage(cfg)
 
         await storage.initialize()
 
@@ -438,15 +427,8 @@ async def stats(document_id: Optional[str], config: Optional[str], format: str):
         # Load config
         cfg = RAGVersionConfig.load(config)
 
-        if not cfg.supabase:
-            rprint("[red]✗[/red] Supabase configuration not found")
-            sys.exit(1)
-
         # Initialize tracker
-        storage = SupabaseStorage(
-            url=cfg.supabase.url,
-            key=cfg.supabase.key,
-        )
+        storage = get_storage(cfg)
 
         tracker = AsyncVersionTracker(storage=storage)
         await tracker.initialize()
@@ -609,6 +591,267 @@ async def stats(document_id: Optional[str], config: Optional[str], format: str):
         sys.exit(1)
     except Exception as e:
         rprint(f"[red]✗[/red] Failed to get statistics: {e}")
+        sys.exit(1)
+
+
+@main.command()
+@click.option("--config", "-c", help="Path to config file")
+@click.option("--host", default="0.0.0.0", help="Host to bind to")
+@click.option("--port", "-p", default=8000, type=int, help="Port to bind to")
+@click.option("--reload", is_flag=True, help="Enable auto-reload for development")
+@async_command
+async def serve(config: Optional[str], host: str, port: int, reload: bool):
+    """Start the web server with REST API and UI.
+
+    This command starts a FastAPI server that provides both a web-based
+    UI for visual browsing and a REST API for programmatic access to all
+    tracking, versioning, and analytics features.
+
+    Examples:
+
+        # Start server with defaults (localhost:8000)
+        ragversion serve
+
+        # Start on custom port
+        ragversion serve --port 5000
+
+        # Start with auto-reload for development
+        ragversion serve --reload
+
+        # Bind to all interfaces
+        ragversion serve --host 0.0.0.0 --port 8080
+
+    Once started, you can access:
+        - Web UI: http://localhost:8000/
+        - API docs: http://localhost:8000/api/docs
+        - ReDoc: http://localhost:8000/api/redoc
+        - Health check: http://localhost:8000/api/health
+    """
+    try:
+        import uvicorn
+        from ragversion.api import create_app
+        from ragversion.api.config import APIConfig
+
+        # Load RAGVersion config
+        cfg = RAGVersionConfig.load(config)
+
+        # Initialize storage and tracker
+        storage = get_storage(cfg)
+        tracker = AsyncVersionTracker(
+            storage=storage,
+            store_content=cfg.tracking.store_content,
+            max_file_size_mb=cfg.tracking.max_file_size_mb,
+        )
+
+        # Create API config
+        api_config = APIConfig(
+            host=host,
+            port=port,
+            version=__version__,
+        )
+
+        # Create FastAPI app
+        app = create_app(tracker=tracker, config=api_config)
+
+        # Display startup info
+        rprint(Panel.fit(
+            f"[bold cyan]RAGVersion Server[/bold cyan]\n"
+            f"[dim]Version {__version__}[/dim]",
+            border_style="cyan",
+        ))
+
+        rprint(f"\n[bold]Configuration:[/bold]")
+        rprint(f"  Storage: {cfg.storage_backend}")
+        rprint(f"  Host: {host}")
+        rprint(f"  Port: {port}")
+        rprint(f"  Reload: {reload}")
+
+        # Format URL based on host
+        url_host = "localhost" if host in ["0.0.0.0", "127.0.0.1"] else host
+
+        rprint(f"\n[bold]Web Interface:[/bold]")
+        rprint(f"  🌐 Dashboard: http://{url_host}:{port}/")
+        rprint(f"  📄 Documents: http://{url_host}:{port}/documents")
+
+        rprint(f"\n[bold]API Endpoints:[/bold]")
+        rprint(f"  📚 Swagger UI: http://{url_host}:{port}/api/docs")
+        rprint(f"  📖 ReDoc: http://{url_host}:{port}/api/redoc")
+        rprint(f"  ❤️  Health Check: http://{url_host}:{port}/api/health")
+
+        rprint(f"\n[green]🚀 Starting server...[/green]\n")
+
+        # Run server
+        uvicorn.run(
+            app,
+            host=host,
+            port=port,
+            reload=reload,
+            log_level="info",
+        )
+
+    except ImportError:
+        rprint("[red]✗[/red] FastAPI dependencies not installed")
+        rprint("Install with: pip install 'ragversion[api]'")
+        sys.exit(1)
+    except Exception as e:
+        rprint(f"[red]✗[/red] Failed to start server: {e}")
+        sys.exit(1)
+
+
+@main.command()
+@click.argument("paths", nargs=-1, required=True, type=click.Path(exists=True))
+@click.option(
+    "--config",
+    "-c",
+    default="ragversion.yaml",
+    help="Path to config file",
+)
+@click.option(
+    "--pattern",
+    "-p",
+    "patterns",
+    multiple=True,
+    help="File patterns to watch (e.g., *.md, *.txt). Can be specified multiple times.",
+)
+@click.option(
+    "--ignore",
+    "-i",
+    "ignore_patterns",
+    multiple=True,
+    help="Patterns to ignore (e.g., *.tmp, .git/*). Can be specified multiple times.",
+)
+@click.option(
+    "--recursive/--no-recursive",
+    default=True,
+    help="Watch subdirectories recursively (default: recursive)",
+)
+@click.option(
+    "--verbose",
+    "-v",
+    is_flag=True,
+    help="Enable verbose logging",
+)
+@async_command
+async def watch(
+    paths: tuple,
+    config: str,
+    patterns: tuple,
+    ignore_patterns: tuple,
+    recursive: bool,
+    verbose: bool,
+):
+    """Watch directories for changes and automatically track them.
+
+    This command starts a file watcher that monitors the specified paths
+    for file changes (create, modify, delete) and automatically tracks them.
+
+    Examples:
+
+        # Watch a single directory
+        ragversion watch ./docs
+
+        # Watch multiple directories
+        ragversion watch ./docs ./guides
+
+        # Watch only Markdown files
+        ragversion watch ./docs --pattern "*.md"
+
+        # Watch with multiple patterns
+        ragversion watch ./docs -p "*.md" -p "*.txt" -p "*.pdf"
+
+        # Ignore specific patterns
+        ragversion watch ./docs --ignore "*.draft" --ignore "*.bak"
+
+        # Non-recursive watch (only top-level files)
+        ragversion watch ./docs --no-recursive
+    """
+    import logging
+
+    from ragversion.watcher import FileWatcher
+
+    # Set up logging
+    log_level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    try:
+        # Load configuration
+        cfg = RAGVersionConfig.load(config)
+        storage = get_storage(cfg)
+
+        # Display watch info
+        rprint(Panel.fit(
+            "[bold cyan]RAGVersion File Watcher[/bold cyan]\n"
+            f"[dim]Press Ctrl+C to stop[/dim]",
+            border_style="cyan",
+        ))
+
+        rprint(f"\n[bold]Configuration:[/bold]")
+        rprint(f"  Storage: {cfg.storage_backend}")
+        rprint(f"  Recursive: {recursive}")
+        if patterns:
+            rprint(f"  Patterns: {', '.join(patterns)}")
+        else:
+            rprint(f"  Patterns: [dim]all files[/dim]")
+        if ignore_patterns:
+            rprint(f"  Ignoring: {', '.join(ignore_patterns)}")
+
+        rprint(f"\n[bold]Watching paths:[/bold]")
+        for path in paths:
+            rprint(f"  • {path}")
+
+        rprint("\n[green]👀 Watching for changes...[/green]\n")
+
+        # Create tracker
+        tracker = AsyncVersionTracker(
+            storage=storage,
+            store_content=cfg.tracking.store_content,
+            max_file_size_mb=cfg.tracking.max_file_size_mb,
+        )
+        await tracker.initialize()
+
+        def on_change(change):
+            """Callback for change events."""
+            icon = {
+                "created": "✨",
+                "modified": "📝",
+                "deleted": "🗑️",
+                "restored": "♻️",
+            }.get(change.change_type.value, "📄")
+
+            rprint(
+                f"{icon} [{change.change_type.value.upper()}] "
+                f"{change.file_name} "
+                f"[dim](v{change.version_number})[/dim]"
+            )
+
+        # Create and start watcher
+        watcher = FileWatcher(
+            tracker=tracker,
+            paths=list(paths),
+            patterns=list(patterns) if patterns else None,
+            ignore_patterns=list(ignore_patterns) if ignore_patterns else None,
+            recursive=recursive,
+            on_change=on_change,
+        )
+
+        try:
+            await watcher.watch()
+        except KeyboardInterrupt:
+            rprint("\n[yellow]Stopping watcher...[/yellow]")
+        finally:
+            watcher.stop()
+            await tracker.close()
+            rprint("[green]✓[/green] Watcher stopped")
+
+    except Exception as e:
+        rprint(f"[red]✗[/red] Failed to start watcher: {e}")
+        if verbose:
+            import traceback
+            traceback.print_exc()
         sys.exit(1)
 
 

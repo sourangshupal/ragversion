@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}Version Comparison - RAGVersion{% endblock %}
+
+{% block extra_css %}
+<style>
+    .diff-container {
+        background: #1e293b;
+        color: #e2e8f0;
+        border-radius: 8px;
+        padding: 1.5rem;
+        overflow-x: auto;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 0.875rem;
+        line-height: 1.6;
+    }
+
+    .diff-line {
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
+
+    .diff-addition {
+        background: rgba(16, 185, 129, 0.2);
+        color: #6ee7b7;
+    }
+
+    .diff-deletion {
+        background: rgba(239, 68, 68, 0.2);
+        color: #fca5a5;
+    }
+
+    .diff-context {
+        color: #94a3b8;
+    }
+
+    .diff-header {
+        color: #60a5fa;
+        font-weight: bold;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 1rem;">
+    <a href="/documents/{{ document_id }}" class="link">← Back to Document</a>
+</div>
+
+<h1 style="margin-bottom: 2rem;">Version Comparison</h1>
+
+<!-- Comparison Info -->
+<div class="stats-grid" style="margin-bottom: 2rem;">
+    <div class="stat-card">
+        <div class="stat-label">From Version</div>
+        <div class="stat-value">v{{ from_version }}</div>
+    </div>
+
+    <div class="stat-card" style="border-left-color: #10b981;">
+        <div class="stat-label">To Version</div>
+        <div class="stat-value">v{{ to_version }}</div>
+    </div>
+
+    <div class="stat-card" style="border-left-color: #10b981;">
+        <div class="stat-label">Additions</div>
+        <div class="stat-value" style="color: #10b981;">+{{ diff.additions }}</div>
+    </div>
+
+    <div class="stat-card" style="border-left-color: #ef4444;">
+        <div class="stat-label">Deletions</div>
+        <div class="stat-value" style="color: #ef4444;">-{{ diff.deletions }}</div>
+    </div>
+
+    <div class="stat-card" style="border-left-color: #f59e0b;">
+        <div class="stat-label">Changes</div>
+        <div class="stat-value">{{ diff.changes }}</div>
+    </div>
+
+    <div class="stat-card" style="border-left-color: #8b5cf6;">
+        <div class="stat-label">Similarity</div>
+        <div class="stat-value">{{ "%.1f"|format(diff.similarity * 100) }}%</div>
+    </div>
+</div>
+
+<!-- Diff Content -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Detailed Changes</h2>
+    </div>
+
+    {% if diff.diff_text %}
+    <div class="diff-container">
+        {% for line in diff.diff_text.split('\n') %}
+        <div class="diff-line
+            {%- if line.startswith('+++') or line.startswith('---') or line.startswith('@@') %} diff-header
+            {%- elif line.startswith('+') %} diff-addition
+            {%- elif line.startswith('-') %} diff-deletion
+            {%- else %} diff-context{% endif -%}
+        ">{{ line }}</div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <h3>No differences found</h3>
+        <p>The versions appear to be identical.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Legend -->
+<div class="card mt-4">
+    <div class="card-header">
+        <h3 class="card-title" style="font-size: 1rem;">Legend</h3>
+    </div>
+    <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div style="width: 20px; height: 20px; background: rgba(16, 185, 129, 0.3); border-radius: 4px;"></div>
+            <span>Added lines</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div style="width: 20px; height: 20px; background: rgba(239, 68, 68, 0.3); border-radius: 4px;"></div>
+            <span>Removed lines</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div style="width: 20px; height: 20px; background: rgba(148, 163, 184, 0.2); border-radius: 4px;"></div>
+            <span>Context lines</span>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

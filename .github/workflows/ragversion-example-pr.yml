@@ -1,0 +1,74 @@
+name: RAGVersion - PR Documentation Check
+
+# Example: Track documentation changes in pull requests
+# Fail if tracking fails to ensure documentation is trackable
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'docs/**'
+      - '*.md'
+
+jobs:
+  check-docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Track documentation changes
+        id: track
+        uses: ./.github/actions/ragversion-track
+        with:
+          paths: 'docs/'
+          storage-backend: 'sqlite'
+          file-patterns: '*.md *.txt *.pdf'
+          fail-on-error: true  # Fail PR if tracking fails
+          install-parsers: true
+
+      - name: Comment on PR with results
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const tracked = '${{ steps.track.outputs.tracked-files }}';
+            const changes = '${{ steps.track.outputs.changes-detected }}';
+            const success = '${{ steps.track.outputs.success }}';
+
+            const status = success === 'true' ? '✅ Success' : '❌ Failed';
+
+            const comment = `## RAGVersion Documentation Tracking ${status}
+
+            - **Files Tracked:** ${tracked}
+            - **Changes Detected:** ${changes}
+
+            ${success === 'true'
+              ? 'All documentation changes have been successfully tracked.'
+              : 'Some documents could not be tracked. Please check the action logs.'}
+
+            *Powered by [RAGVersion](https://github.com/sourangshupal/ragversion)*
+            `;
+
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment
+            });
+
+      - name: Upload tracking database
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-${{ github.event.pull_request.number }}-ragversion-db
+          path: ragversion.db
+          retention-days: 7

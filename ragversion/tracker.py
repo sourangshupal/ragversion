@@ -5,7 +5,7 @@ import inspect
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Union, TYPE_CHECKING
 from uuid import UUID
 
 from ragversion.detector import ChangeDetector
@@ -19,8 +19,13 @@ from ragversion.models import (
     FileProcessingError,
     StorageStatistics,
     Version,
+    ChunkDiff,
+    ChunkingConfig,
 )
 from ragversion.storage.base import BaseStorage
+
+if TYPE_CHECKING:
+    from ragversion.notifications.manager import NotificationManager
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +45,9 @@ class AsyncVersionTracker:
         max_file_size_mb: int = 50,
         hash_algorithm: str = "sha256",
         callback_timeout: int = 60,
+        notification_manager: Optional["NotificationManager"] = None,
+        chunk_tracking_enabled: bool = False,
+        chunk_config: Optional[ChunkingConfig] = None,
     ):
         """
         Initialize AsyncVersionTracker.
@@ -50,6 +58,9 @@ class AsyncVersionTracker:
             max_file_size_mb: Maximum file size to process
             hash_algorithm: Hash algorithm to use
             callback_timeout: Timeout for callbacks in seconds
+            notification_manager: Optional notification manager
+            chunk_tracking_enabled: Enable chunk-level tracking (v0.10.0)
+            chunk_config: Chunk tracking configuration (v0.10.0)
         """
         self.storage = storage
         self.detector = ChangeDetector(
@@ -59,8 +70,34 @@ class AsyncVersionTracker:
             hash_algorithm=hash_algorithm,
         )
         self.callback_timeout = callback_timeout
+        self.notification_manager = notification_manager
         self._callbacks: List[CallbackType] = []
         self._initialized = False
+
+        # Chunk tracking (v0.10.0)
+        self.chunk_tracking_enabled = chunk_tracking_enabled
+        self.chunk_config = chunk_config or ChunkingConfig()
+        self.chunker = None
+        self.chunk_detector = None
+
+        # Initialize chunking components if enabled
+        if self.chunk_tracking_enabled:
+            try:
+                from ragversion.chunking import ChunkerRegistry, ChunkChangeDetector
+
+                self.chunker = ChunkerRegistry.get_chunker(
+                    self.chunk_config.splitter_type,
+                    chunk_size=self.chunk_config.chunk_size,
+                    chunk_overlap=self.chunk_config.chunk_overlap,
+                )
+                self.chunk_detector = ChunkChangeDetector(storage, self.chunker)
+                logger.info(
+                    f"Chunk tracking enabled: {self.chunk_config.splitter_type} splitter, "
+                    f"chunk_size={self.chunk_config.chunk_size}, overlap={self.chunk_config.chunk_overlap}"
+                )
+            except ImportError as e:
+                logger.warning(f"Failed to initialize chunk tracking: {e}")
+                self.chunk_tracking_enabled = False
 
     async def initialize(self) -> None:
         """Initialize the tracker and storage backend."""
@@ -109,11 +146,19 @@ class AsyncVersionTracker:
 
     async def _emit_event(self, event: ChangeEvent) -> None:
         """
-        Emit a change event to all callbacks.
+        Emit a change event to all callbacks and notifications.
 
         Args:
             event: The change event to emit
         """
+        # Send notifications if manager is configured
+        if self.notification_manager:
+            try:
+                await self.notification_manager.notify(event)
+            except Exception as e:
+                logger.error(f"Error sending notifications: {e}")
+
+        # Execute callbacks
         for callback in self._callbacks:
             try:
                 # Check if callback is async
@@ -412,6 +457,157 @@ class AsyncVersionTracker:
         """Get diff between two versions."""
         self._ensure_initialized()
         return await self.storage.compute_diff(document_id, from_version, to_version)
+
+    # Chunk-level operations (v0.10.0)
+
+    async def get_chunk_diff(
+        self,
+        document_id: UUID,
+        from_version: int,
+        to_version: int,
+    ) -> Optional[ChunkDiff]:
+        """Get chunk-level diff between two versions.
+
+        This method compares chunks between versions to identify which chunks
+        have been added, removed, unchanged, or reordered. This enables
+        cost-optimized embedding updates by only re-embedding changed chunks.
+
+        Args:
+            document_id: ID of the document
+            from_version: Source version number
+            to_version: Target version number
+
+        Returns:
+            ChunkDiff containing categorized chunk changes, or None if chunk
+            tracking is disabled or versions not found
+
+        Example:
+            >>> chunk_diff = await tracker.get_chunk_diff(doc_id, 1, 2)
+            >>> print(f"Savings: {chunk_diff.savings_percentage:.1f}%")
+            >>> print(f"Chunks to re-embed: {len(chunk_diff.added_chunks)}")
+        """
+        self._ensure_initialized()
+
+        if not self.chunk_tracking_enabled:
+            logger.debug("Chunk tracking is disabled, returning None")
+            return None
+
+        try:
+            # Get version records
+            from_ver = await self.storage.get_version_by_number(document_id, from_version)
+            to_ver = await self.storage.get_version_by_number(document_id, to_version)
+
+            if not from_ver or not to_ver:
+                logger.warning(
+                    f"Version not found: from_version={from_version}, to_version={to_version}"
+                )
+                return None
+
+            # Get content for to_version
+            to_content = await self.storage.get_content(to_ver.id)
+            if not to_content:
+                logger.warning(f"No content found for version {to_ver.id}")
+                return None
+
+            # Detect chunk changes
+            chunk_diff = await self.chunk_detector.detect_chunk_changes(
+                document_id, from_ver.id, to_content, to_ver.id
+            )
+
+            # Log savings metrics
+            metrics = self.chunk_detector.calculate_savings_metrics(chunk_diff)
+            logger.info(
+                f"Chunk diff for document {document_id} v{from_version}→v{to_version}: "
+                f"{metrics['savings_percentage']:.1f}% savings, "
+                f"{metrics['chunks_to_embed']} chunks to embed"
+            )
+
+            return chunk_diff
+
+        except Exception as e:
+            logger.error(f"Failed to compute chunk diff: {e}")
+            return None
+
+    async def track_with_chunks(
+        self,
+        file_path: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> tuple[Optional[ChangeEvent], Optional[ChunkDiff]]:
+        """Track a file and create chunks if chunk tracking is enabled.
+
+        This is an enhanced version of track() that also creates and stores
+        chunks when chunk tracking is enabled.
+
+        Args:
+            file_path: Path to the file
+            metadata: Optional metadata to attach
+
+        Returns:
+            Tuple of (ChangeEvent, ChunkDiff) if change detected, (None, None) otherwise
+
+        Example:
+            >>> event, chunk_diff = await tracker.track_with_chunks("doc.txt")
+            >>> if chunk_diff:
+            >>>     print(f"Created {len(chunk_diff.added_chunks)} chunks")
+        """
+        self._ensure_initialized()
+
+        # First, track the document normally
+        event = await self.track(file_path, metadata)
+
+        if not event:
+            return None, None
+
+        # If chunk tracking disabled, return early
+        if not self.chunk_tracking_enabled:
+            return event, None
+
+        try:
+            # Get content for the new version
+            content = await self.storage.get_content(event.version_id)
+            if not content:
+                logger.warning(f"No content found for version {event.version_id}")
+                return event, None
+
+            # Detect chunk changes (or create initial chunks)
+            old_version_id = None
+            if event.version_number > 1:
+                # Get previous version
+                old_version = await self.storage.get_version_by_number(
+                    event.document_id, event.version_number - 1
+                )
+                old_version_id = old_version.id if old_version else None
+
+            chunk_diff = await self.chunk_detector.detect_chunk_changes(
+                event.document_id,
+                old_version_id,
+                content,
+                event.version_id,
+            )
+
+            # Store chunks (all new chunks from the diff)
+            chunks_to_store = []
+            chunks_to_store.extend(chunk_diff.added_chunks)
+            chunks_to_store.extend(chunk_diff.unchanged_chunks)
+            chunks_to_store.extend(chunk_diff.reordered_chunks)
+
+            if chunks_to_store and self.chunk_config.store_chunk_content:
+                await self.storage.create_chunks_batch(chunks_to_store)
+                logger.debug(f"Stored {len(chunks_to_store)} chunks for version {event.version_id}")
+
+            # Log savings metrics
+            metrics = self.chunk_detector.calculate_savings_metrics(chunk_diff)
+            logger.info(
+                f"Chunk tracking for {event.file_name}: "
+                f"{metrics['total_chunks']} total chunks, "
+                f"{metrics['savings_percentage']:.1f}% savings"
+            )
+
+            return event, chunk_diff
+
+        except Exception as e:
+            logger.error(f"Failed to create chunks for {file_path}: {e}")
+            return event, None
 
     # Cleanup operations
 

@@ -1,0 +1,45 @@
+name: RAGVersion - Supabase Backend
+
+# Example: Track documentation using Supabase as backend
+# Useful for team collaboration and cloud storage
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'docs/**'
+      - '*.md'
+
+  workflow_dispatch:
+
+jobs:
+  track-with-supabase:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Track documentation with Supabase
+        uses: ./.github/actions/ragversion-track
+        with:
+          paths: 'docs/ README.md'
+          storage-backend: 'supabase'
+          supabase-url: ${{ secrets.SUPABASE_URL }}
+          supabase-key: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          file-patterns: '*.md *.txt'
+          max-workers: 4
+          install-parsers: true
+          fail-on-error: true
+
+      - name: Get statistics
+        if: always()
+        run: |
+          echo "📊 RAGVersion Statistics (Supabase):"
+          ragversion stats
+
+      # Note: No database artifact upload for Supabase (data is in cloud)

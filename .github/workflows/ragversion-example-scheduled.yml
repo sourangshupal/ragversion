@@ -1,0 +1,98 @@
+name: RAGVersion - Scheduled Tracking
+
+# Example: Periodic documentation tracking (daily at midnight UTC)
+# Useful for monitoring documentation changes over time
+
+on:
+  schedule:
+    # Run daily at midnight UTC
+    - cron: '0 0 * * *'
+
+  # Allow manual triggering
+  workflow_dispatch:
+
+jobs:
+  scheduled-track:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Track all documents
+        id: track
+        uses: ./.github/actions/ragversion-track
+        with:
+          paths: 'docs/ examples/ README.md'
+          storage-backend: 'sqlite'
+          sqlite-db-path: 'ragversion-scheduled.db'
+          max-workers: 8  # Higher parallelism for scheduled runs
+          install-parsers: true
+          fail-on-error: false
+
+      - name: Generate tracking report
+        if: always()
+        shell: bash
+        run: |
+          echo "# RAGVersion Daily Tracking Report" > report.md
+          echo "**Date:** $(date)" >> report.md
+          echo "" >> report.md
+
+          echo "## Summary" >> report.md
+          echo "- Files Tracked: ${{ steps.track.outputs.tracked-files }}" >> report.md
+          echo "- Changes Detected: ${{ steps.track.outputs.changes-detected }}" >> report.md
+          echo "- Status: ${{ steps.track.outputs.success }}" >> report.md
+          echo "" >> report.md
+
+          echo "## Statistics" >> report.md
+          ragversion stats --json | python3 -m json.tool >> report.md
+
+          cat report.md
+
+      - name: Upload report and database
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ragversion-daily-report-${{ github.run_number }}
+          path: |
+            report.md
+            ragversion-scheduled.db
+          retention-days: 90  # Keep 90 days of history
+
+      - name: Send notification on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issue = {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🚨 RAGVersion scheduled tracking failed',
+              body: `The scheduled documentation tracking job failed.
+
+              - **Run ID:** ${context.runId}
+              - **Run Number:** ${context.runNumber}
+              - **Time:** ${new Date().toISOString()}
+
+              Please check the [workflow run](${context.payload.repository.html_url}/actions/runs/${context.runId}) for details.`
+            };
+
+            // Only create issue if not already exists
+            const existingIssues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'ragversion-alert'
+            });
+
+            if (existingIssues.data.length === 0) {
+              await github.rest.issues.create({
+                ...issue,
+                labels: ['ragversion-alert', 'automated']
+              });
+            }

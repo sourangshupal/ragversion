@@ -1,0 +1,46 @@
+name: RAGVersion - Basic Tracking
+
+# Example: Track documentation changes on every push to main branch
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'docs/**'
+      - '*.md'
+
+  # Allow manual triggering
+  workflow_dispatch:
+
+jobs:
+  track-docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for accurate tracking
+
+      - name: Track documentation with RAGVersion
+        uses: ./.github/actions/ragversion-track
+        with:
+          paths: 'docs/ README.md CHANGELOG.md'
+          storage-backend: 'sqlite'
+          sqlite-db-path: '.ragversion/ragversion.db'
+          file-patterns: '*.md *.txt'
+          max-workers: 4
+          install-parsers: true
+          fail-on-error: false
+
+      - name: Archive tracking results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ragversion-tracking-${{ github.sha }}
+          path: |
+            .ragversion/
+            ragversion.yaml
+          retention-days: 30

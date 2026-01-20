@@ -3,13 +3,23 @@
 
 # Storage backend configuration
 storage:
-  backend: supabase
-  supabase:
-    # Use environment variables or specify directly
-    url: ${SUPABASE_URL}
-    key: ${SUPABASE_SERVICE_KEY}
-    connection_pool_size: 10
+  # Choose backend: sqlite (default, zero-config) or supabase (cloud)
+  backend: sqlite
+
+  # SQLite configuration (local, zero-configuration)
+  sqlite:
+    db_path: ragversion.db  # Path to database file
+    content_compression: true  # Compress stored content
     timeout_seconds: 30
+
+  # Supabase configuration (cloud, requires setup)
+  # Uncomment and configure if using Supabase
+  # supabase:
+  #   # Use environment variables or specify directly
+  #   url: ${SUPABASE_URL}
+  #   key: ${SUPABASE_SERVICE_KEY}
+  #   connection_pool_size: 10
+  #   timeout_seconds: 30
 
 # Document tracking configuration
 tracking:

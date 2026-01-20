@@ -1,0 +1,129 @@
+# Webhook Notification Example
+#
+# This example shows how to configure custom webhook notifications.
+# Webhooks allow you to integrate RAGVersion with any HTTP API.
+
+storage:
+  backend: sqlite
+  sqlite:
+    db_path: ragversion.db
+
+notifications:
+  enabled: true
+  notifiers:
+    - type: webhook
+      name: custom-api
+      enabled: true
+
+      # Required: Webhook URL
+      url: https://your-api.com/webhooks/documents
+
+      # Optional: HTTP method (default: POST)
+      method: POST  # Options: POST, PUT, PATCH
+
+      # Optional: Custom headers
+      headers:
+        Authorization: Bearer YOUR_API_TOKEN
+        Content-Type: application/json
+        X-Environment: production
+        X-Service: ragversion
+
+      # Optional: Include metadata in payload (default: true)
+      include_metadata: true
+
+      # Optional: Request timeout in seconds
+      timeout_seconds: 30
+
+# Webhook Payload Format:
+#
+# The webhook will receive a JSON payload with this structure:
+#
+# {
+#   "event": "document_change",
+#   "change_type": "modified",  # created, modified, deleted, or restored
+#   "document": {
+#     "id": "550e8400-e29b-41d4-a716-446655440000",
+#     "file_name": "report.pdf",
+#     "file_path": "/path/to/report.pdf",
+#     "file_size": 102400,
+#     "content_hash": "sha256:abc123..."
+#   },
+#   "version": {
+#     "id": "660e8400-e29b-41d4-a716-446655440001",
+#     "number": 3,
+#     "previous_hash": "sha256:def456..."
+#   },
+#   "timestamp": "2025-01-20T10:30:00Z",
+#   "metadata": {
+#     "environment": "production",
+#     "triggered_by": "automated_sync"
+#   }
+# }
+
+# Use Cases:
+#
+# 1. Trigger CI/CD pipelines when documents change
+# 2. Update external databases or caches
+# 3. Send notifications to custom systems
+# 4. Log changes to audit systems
+# 5. Trigger document processing workflows
+# 6. Update search indexes
+# 7. Synchronize with other version control systems
+
+# Example Endpoint Implementation (Python/FastAPI):
+#
+# from fastapi import FastAPI, Header
+# from pydantic import BaseModel
+#
+# app = FastAPI()
+#
+# class WebhookPayload(BaseModel):
+#     event: str
+#     change_type: str
+#     document: dict
+#     version: dict
+#     timestamp: str
+#     metadata: dict = {}
+#
+# @app.post("/webhooks/documents")
+# async def handle_document_change(
+#     payload: WebhookPayload,
+#     authorization: str = Header(None)
+# ):
+#     # Verify authorization
+#     if authorization != "Bearer YOUR_API_TOKEN":
+#         return {"error": "Unauthorized"}, 401
+#
+#     # Process the change
+#     if payload.change_type == "deleted":
+#         # Handle deletion
+#         pass
+#     elif payload.change_type == "modified":
+#         # Handle modification
+#         pass
+#
+#     return {"status": "success"}
+
+# Example usage:
+#
+# CLI:
+#   ragversion watch ./documents --patterns "*.pdf"
+#
+# Python:
+#   from ragversion import AsyncVersionTracker
+#   from ragversion.storage.sqlite import SQLiteStorage
+#   from ragversion.config import RAGVersionConfig
+#   from ragversion.notifications import create_notification_manager
+#
+#   config = RAGVersionConfig.load("webhook_example.yaml")
+#   notification_manager = create_notification_manager(config.notifications.notifiers)
+#
+#   storage = SQLiteStorage(config.sqlite.db_path)
+#   tracker = AsyncVersionTracker(storage=storage, notification_manager=notification_manager)
+#
+#   async with tracker:
+#       metadata = {
+#           "environment": "production",
+#           "triggered_by": "user_upload"
+#       }
+#       await tracker.track("./documents/report.pdf", metadata=metadata)

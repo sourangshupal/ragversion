@@ -1,0 +1,83 @@
+{
+  "timestamp": "2026-01-20T11:03:30.296795",
+  "database": ":memory:",
+  "results": {
+    "List 100 recent documents": {
+      "avg_ms": 0.77,
+      "min_ms": 0.7,
+      "max_ms": 0.92,
+      "p95_ms": 0.92,
+      "iterations": 10
+    },
+    "List 100 documents by name": {
+      "avg_ms": 3.01,
+      "min_ms": 2.84,
+      "max_ms": 3.12,
+      "p95_ms": 3.12,
+      "iterations": 10
+    },
+    "List 100 documents by size": {
+      "avg_ms": 0.8,
+      "min_ms": 0.73,
+      "max_ms": 0.98,
+      "p95_ms": 0.98,
+      "iterations": 10
+    },
+    "List 100 documents by version count": {
+      "avg_ms": 0.72,
+      "min_ms": 0.69,
+      "max_ms": 0.77,
+      "p95_ms": 0.77,
+      "iterations": 10
+    },
+    "Search documents by file type (pdf)": {
+      "avg_ms": 1.49,
+      "min_ms": 1.39,
+      "max_ms": 1.67,
+      "p95_ms": 1.67,
+      "iterations": 10
+    },
+    "Search by type + metadata filter": {
+      "avg_ms": 0.28,
+      "min_ms": 0.23,
+      "max_ms": 0.37,
+      "p95_ms": 0.37,
+      "iterations": 10
+    },
+    "Get document by file path": {
+      "avg_ms": 0.09,
+      "min_ms": 0.09,
+      "max_ms": 0.11,
+      "p95_ms": 0.11,
+      "iterations": 10
+    },
+    "Get version history (50 versions)": {
+      "avg_ms": 0.14,
+      "min_ms": 0.13,
+      "max_ms": 0.2,
+      "p95_ms": 0.2,
+      "iterations": 10
+    },
+    "Get latest version": {
+      "avg_ms": 0.09,
+      "min_ms": 0.09,
+      "max_ms": 0.11,
+      "p95_ms": 0.11,
+      "iterations": 10
+    },
+    "Get storage statistics": {
+      "avg_ms": 1.05,
+      "min_ms": 0.98,
+      "max_ms": 1.3,
+      "p95_ms": 1.3,
+      "iterations": 10
+    },
+    "Get top 10 documents by version count": {
+      "avg_ms": 0.21,
+      "min_ms": 0.16,
+      "max_ms": 0.36,
+      "p95_ms": 0.36,
+      "iterations": 10
+    }
+  }
+}

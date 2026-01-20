@@ -1,0 +1,208 @@
+name: 'RAGVersion Track'
+description: 'Track document changes with RAGVersion in your CI/CD pipeline'
+author: 'Sourangshu Pal'
+
+branding:
+  icon: 'file-text'
+  color: 'blue'
+
+inputs:
+  paths:
+    description: 'Paths to track (space-separated, e.g., "docs/ README.md")'
+    required: true
+    default: 'docs/'
+
+  storage-backend:
+    description: 'Storage backend: sqlite or supabase'
+    required: false
+    default: 'sqlite'
+
+  sqlite-db-path:
+    description: 'SQLite database path (for sqlite backend)'
+    required: false
+    default: 'ragversion.db'
+
+  supabase-url:
+    description: 'Supabase URL (for supabase backend)'
+    required: false
+    default: ''
+
+  supabase-key:
+    description: 'Supabase service key (for supabase backend)'
+    required: false
+    default: ''
+
+  file-patterns:
+    description: 'File patterns to track (e.g., "*.md *.txt")'
+    required: false
+    default: ''
+
+  max-workers:
+    description: 'Maximum concurrent workers for tracking'
+    required: false
+    default: '4'
+
+  python-version:
+    description: 'Python version to use'
+    required: false
+    default: '3.11'
+
+  ragversion-version:
+    description: 'RAGVersion version to install (e.g., "0.4.0" or "latest")'
+    required: false
+    default: 'latest'
+
+  fail-on-error:
+    description: 'Fail the workflow if tracking fails'
+    required: false
+    default: 'false'
+
+  install-parsers:
+    description: 'Install optional parser dependencies (pdf, docx, etc.)'
+    required: false
+    default: 'true'
+
+outputs:
+  tracked-files:
+    description: 'Number of files tracked'
+    value: ${{ steps.track.outputs.tracked-files }}
+
+  changes-detected:
+    description: 'Number of changes detected'
+    value: ${{ steps.track.outputs.changes-detected }}
+
+  success:
+    description: 'Whether tracking succeeded'
+    value: ${{ steps.track.outputs.success }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install RAGVersion
+      shell: bash
+      run: |
+        echo "Installing RAGVersion..."
+        if [ "${{ inputs.ragversion-version }}" = "latest" ]; then
+          pip install ragversion
+        else
+          pip install ragversion==${{ inputs.ragversion-version }}
+        fi
+
+        if [ "${{ inputs.install-parsers }}" = "true" ]; then
+          echo "Installing parser dependencies..."
+          pip install 'ragversion[parsers]'
+        fi
+
+        echo "RAGVersion installed: $(ragversion --version)"
+
+    - name: Create RAGVersion config
+      shell: bash
+      run: |
+        echo "Creating RAGVersion configuration..."
+        cat > ragversion.yaml <<EOF
+        storage:
+          backend: ${{ inputs.storage-backend }}
+
+        sqlite:
+          db_path: ${{ inputs.sqlite-db-path }}
+          content_compression: true
+          timeout_seconds: 30
+        EOF
+
+        if [ "${{ inputs.storage-backend }}" = "supabase" ]; then
+          if [ -z "${{ inputs.supabase-url }}" ] || [ -z "${{ inputs.supabase-key }}" ]; then
+            echo "Error: Supabase URL and key are required for supabase backend"
+            exit 1
+          fi
+          cat >> ragversion.yaml <<EOF
+
+        supabase:
+          url: ${{ inputs.supabase-url }}
+          service_key: ${{ inputs.supabase-key }}
+        EOF
+        fi
+
+        echo "Configuration created:"
+        cat ragversion.yaml
+
+    - name: Initialize RAGVersion
+      shell: bash
+      run: |
+        echo "Initializing RAGVersion..."
+        ragversion init --force
+        ragversion migrate
+
+    - name: Track documents
+      id: track
+      shell: bash
+      run: |
+        echo "Tracking documents in: ${{ inputs.paths }}"
+
+        # Build track command
+        TRACK_CMD="ragversion track"
+
+        # Add file patterns if specified
+        if [ -n "${{ inputs.file-patterns }}" ]; then
+          for pattern in ${{ inputs.file-patterns }}; do
+            TRACK_CMD="$TRACK_CMD --pattern \"$pattern\""
+          done
+        fi
+
+        # Add max workers
+        TRACK_CMD="$TRACK_CMD --max-workers ${{ inputs.max-workers }}"
+
+        # Track each path
+        TRACKED=0
+        CHANGES=0
+        SUCCESS=true
+
+        for path in ${{ inputs.paths }}; do
+          echo "Tracking: $path"
+          if eval "$TRACK_CMD \"$path\"" 2>&1 | tee track_output.txt; then
+            # Parse output for statistics
+            FILES=$(grep -o '[0-9]\+ files' track_output.txt | grep -o '[0-9]\+' || echo "0")
+            CHANGES_IN_PATH=$(grep -o '[0-9]\+ changes' track_output.txt | grep -o '[0-9]\+' || echo "0")
+
+            TRACKED=$((TRACKED + FILES))
+            CHANGES=$((CHANGES + CHANGES_IN_PATH))
+
+            echo "✓ Tracked $FILES files, detected $CHANGES_IN_PATH changes"
+          else
+            echo "✗ Failed to track: $path"
+            if [ "${{ inputs.fail-on-error }}" = "true" ]; then
+              SUCCESS=false
+              exit 1
+            else
+              SUCCESS=false
+            fi
+          fi
+        done
+
+        # Set outputs
+        echo "tracked-files=$TRACKED" >> $GITHUB_OUTPUT
+        echo "changes-detected=$CHANGES" >> $GITHUB_OUTPUT
+        echo "success=$SUCCESS" >> $GITHUB_OUTPUT
+
+        echo "Summary: Tracked $TRACKED files, detected $CHANGES changes"
+
+    - name: Show statistics
+      shell: bash
+      run: |
+        echo "Getting RAGVersion statistics..."
+        ragversion stats --json > stats.json
+
+        echo "📊 RAGVersion Statistics:"
+        cat stats.json | python3 -m json.tool
+
+    - name: Upload database artifact (SQLite only)
+      if: inputs.storage-backend == 'sqlite'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ragversion-database
+        path: ${{ inputs.sqlite-db-path }}
+        retention-days: 30

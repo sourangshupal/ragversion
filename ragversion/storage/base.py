@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import List, Optional
 from uuid import UUID
 
-from ragversion.models import Document, Version, DiffResult, StorageStatistics, DocumentStatistics
+from ragversion.models import Document, Version, DiffResult, StorageStatistics, DocumentStatistics, Chunk
 
 
 class BaseStorage(ABC):
@@ -26,6 +26,17 @@ class BaseStorage(ABC):
         pass
 
     # Document operations
+
+    async def batch_create_documents(self, documents: List[Document]) -> List[Document]:
+        """Create multiple document records (optimized in subclasses).
+
+        Default implementation calls create_document for each document.
+        Subclasses should override this for better performance.
+        """
+        results = []
+        for doc in documents:
+            results.append(await self.create_document(doc))
+        return results
 
     @abstractmethod
     async def create_document(self, document: Document) -> Document:
@@ -72,6 +83,17 @@ class BaseStorage(ABC):
         pass
 
     # Version operations
+
+    async def batch_create_versions(self, versions: List[Version]) -> List[Version]:
+        """Create multiple version records (optimized in subclasses).
+
+        Default implementation calls create_version for each version.
+        Subclasses should override this for better performance.
+        """
+        results = []
+        for ver in versions:
+            results.append(await self.create_version(ver))
+        return results
 
     @abstractmethod
     async def create_version(self, version: Version) -> Version:
@@ -130,6 +152,101 @@ class BaseStorage(ABC):
     @abstractmethod
     async def delete_content(self, version_id: UUID) -> None:
         """Delete stored content for a version."""
+        pass
+
+    # Chunk operations (v0.10.0 - Chunk-level versioning)
+
+    async def create_chunks_batch(self, chunks: List[Chunk]) -> List[Chunk]:
+        """Create multiple chunks in a batch (optimized in subclasses).
+
+        Default implementation calls create_chunk for each chunk.
+        Subclasses should override this for better performance using batch inserts.
+
+        Args:
+            chunks: List of chunks to create
+
+        Returns:
+            List of created chunks
+        """
+        results = []
+        for chunk in chunks:
+            results.append(await self.create_chunk(chunk))
+        return results
+
+    @abstractmethod
+    async def create_chunk(self, chunk: Chunk) -> Chunk:
+        """Create a single chunk record.
+
+        Args:
+            chunk: Chunk to create
+
+        Returns:
+            Created chunk
+        """
+        pass
+
+    @abstractmethod
+    async def get_chunk_by_id(self, chunk_id: UUID) -> Optional[Chunk]:
+        """Get a chunk by its ID.
+
+        Args:
+            chunk_id: ID of the chunk
+
+        Returns:
+            Chunk if found, None otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def get_chunks_by_version(self, version_id: UUID) -> List[Chunk]:
+        """Get all chunks for a specific version.
+
+        Args:
+            version_id: ID of the version
+
+        Returns:
+            List of chunks, ordered by chunk_index
+        """
+        pass
+
+    @abstractmethod
+    async def store_chunk_content(
+        self,
+        chunk_id: UUID,
+        content: str,
+        compress: bool = True,
+    ) -> None:
+        """Store chunk content separately (optionally compressed).
+
+        Args:
+            chunk_id: ID of the chunk
+            content: Text content of the chunk
+            compress: Whether to compress the content
+        """
+        pass
+
+    @abstractmethod
+    async def get_chunk_content(self, chunk_id: UUID) -> Optional[str]:
+        """Retrieve chunk content (automatically decompressed).
+
+        Args:
+            chunk_id: ID of the chunk
+
+        Returns:
+            Chunk content if found, None otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def delete_chunks_by_version(self, version_id: UUID) -> int:
+        """Delete all chunks associated with a version.
+
+        Args:
+            version_id: ID of the version
+
+        Returns:
+            Number of chunks deleted
+        """
         pass
 
     # Diff operations

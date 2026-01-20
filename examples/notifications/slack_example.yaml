@@ -1,0 +1,68 @@
+# Slack Notification Example
+#
+# This example shows how to configure Slack notifications for document changes.
+#
+# Setup:
+# 1. Go to https://api.slack.com/apps
+# 2. Create a new app or use existing
+# 3. Enable "Incoming Webhooks"
+# 4. Create a webhook for your desired channel
+# 5. Copy the webhook URL below
+
+storage:
+  backend: sqlite
+  sqlite:
+    db_path: ragversion.db
+
+notifications:
+  enabled: true
+  notifiers:
+    - type: slack
+      name: team-slack
+      enabled: true
+
+      # Required: Slack webhook URL
+      webhook_url: https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+
+      # Optional: Override default channel (webhook determines default)
+      channel: "#documents"
+
+      # Optional: Bot display name
+      username: RAGVersion
+
+      # Optional: Bot icon emoji
+      icon_emoji: ":file_folder:"
+
+      # Optional: User IDs to mention (format: U123456)
+      # Find user ID: Slack profile → ⋮ → Copy member ID
+      mention_users:
+        - "U123456"
+        - "U789012"
+
+      # Optional: Only mention users for these change types
+      # Options: created, modified, deleted, restored
+      mention_on_types:
+        - deleted  # Only mention when documents are deleted
+
+      # Optional: Request timeout in seconds
+      timeout_seconds: 30
+
+# Example usage:
+#
+# CLI:
+#   ragversion watch ./documents --patterns "*.pdf"
+#
+# Python:
+#   from ragversion import AsyncVersionTracker
+#   from ragversion.storage.sqlite import SQLiteStorage
+#   from ragversion.config import RAGVersionConfig
+#   from ragversion.notifications import create_notification_manager
+#
+#   config = RAGVersionConfig.load("slack_example.yaml")
+#   notification_manager = create_notification_manager(config.notifications.notifiers)
+#
+#   storage = SQLiteStorage(config.sqlite.db_path)
+#   tracker = AsyncVersionTracker(storage=storage, notification_manager=notification_manager)
+#
+#   async with tracker:
+#       await tracker.track("./documents/report.pdf")

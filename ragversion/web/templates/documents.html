@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Documents - RAGVersion{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1>Documents</h1>
+    <div>
+        <span class="text-muted">Total: {{ total_documents }}</span>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card">
+    <form method="get" action="/documents" style="display: flex; gap: 1rem; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 200px;">
+            <input
+                type="search"
+                name="search"
+                placeholder="Search by filename..."
+                value="{{ search or '' }}"
+                style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px;"
+            >
+        </div>
+        <div>
+            <select
+                name="file_type"
+                style="padding: 0.5rem 2rem 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; background: white;"
+            >
+                <option value="">All Types</option>
+                {% for ft in file_types %}
+                <option value="{{ ft }}" {% if ft == file_type %}selected{% endif %}>{{ ft }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <select
+                name="order_by"
+                style="padding: 0.5rem 2rem 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; background: white;"
+            >
+                <option value="updated_at" {% if order_by == 'updated_at' %}selected{% endif %}>Last Updated</option>
+                <option value="created_at" {% if order_by == 'created_at' %}selected{% endif %}>Created Date</option>
+                <option value="file_name" {% if order_by == 'file_name' %}selected{% endif %}>Name</option>
+                <option value="file_size" {% if order_by == 'file_size' %}selected{% endif %}>Size</option>
+                <option value="version_count" {% if order_by == 'version_count' %}selected{% endif %}>Version Count</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Filter</button>
+        {% if search or file_type %}
+        <a href="/documents" class="btn btn-secondary">Clear</a>
+        {% endif %}
+    </form>
+</div>
+
+<!-- Documents Table -->
+<div class="card">
+    {% if documents %}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>File Name</th>
+                    <th>Type</th>
+                    <th>Versions</th>
+                    <th>Size</th>
+                    <th>Last Updated</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in documents %}
+                <tr>
+                    <td>
+                        <a href="/documents/{{ doc.id }}" class="link" style="font-weight: 600;">
+                            {{ doc.file_name }}
+                        </a><br>
+                        <span class="text-muted text-sm">{{ doc.file_path }}</span>
+                    </td>
+                    <td>
+                        <span class="badge badge-primary">{{ doc.file_type }}</span>
+                    </td>
+                    <td>
+                        <strong>{{ doc.version_count }}</strong>
+                    </td>
+                    <td class="text-sm">
+                        {% set kb = doc.file_size / 1024 %}
+                        {% if kb < 1024 %}
+                            {{ "%.1f"|format(kb) }} KB
+                        {% else %}
+                            {{ "%.1f"|format(kb / 1024) }} MB
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-muted">
+                        {{ doc.updated_at.strftime('%Y-%m-%d %H:%M') if doc.updated_at else 'N/A' }}
+                    </td>
+                    <td>
+                        <a href="/documents/{{ doc.id }}" class="link">View Details</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
+        {% if page > 1 %}
+        <a href="?page={{ page - 1 }}{% if search %}&search={{ search }}{% endif %}{% if file_type %}&file_type={{ file_type }}{% endif %}{% if order_by != 'updated_at' %}&order_by={{ order_by }}{% endif %}" class="btn btn-secondary">Previous</a>
+        {% endif %}
+
+        <span style="padding: 0.5rem 1rem; color: var(--text-muted);">
+            Page {{ page }} of {{ total_pages }}
+        </span>
+
+        {% if page < total_pages %}
+        <a href="?page={{ page + 1 }}{% if search %}&search={{ search }}{% endif %}{% if file_type %}&file_type={{ file_type }}{% endif %}{% if order_by != 'updated_at' %}&order_by={{ order_by }}{% endif %}" class="btn btn-primary">Next</a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+        <h3>No documents found</h3>
+        <p>
+            {% if search or file_type %}
+            Try adjusting your filters or <a href="/documents" class="link">view all documents</a>.
+            {% else %}
+            Start tracking documents using the CLI: <code>ragversion track ./documents</code>
+            {% endif %}
+        </p>
+    </div>
+    {% endif %}
+</div>
+
+{% endblock %}

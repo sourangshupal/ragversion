@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+
+{% block title %}{{ document.file_name }} - RAGVersion{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 1rem;">
+    <a href="/documents" class="link">← Back to Documents</a>
+</div>
+
+<h1 style="margin-bottom: 0.5rem;">{{ document.file_name }}</h1>
+<p class="text-muted mb-2">{{ document.file_path }}</p>
+
+<!-- Document Info -->
+<div class="stats-grid" style="margin-bottom: 2rem;">
+    <div class="stat-card">
+        <div class="stat-label">File Type</div>
+        <div class="stat-value text-sm" style="font-size: 1.5rem;">
+            <span class="badge badge-primary">{{ document.file_type }}</span>
+        </div>
+    </div>
+
+    <div class="stat-card" style="border-left-color: #10b981;">
+        <div class="stat-label">Total Versions</div>
+        <div class="stat-value">{{ document.version_count }}</div>
+        <div class="stat-change text-muted">
+            Current: v{{ document.current_version }}
+        </div>
+    </div>
+
+    <div class="stat-card" style="border-left-color: #f59e0b;">
+        <div class="stat-label">File Size</div>
+        <div class="stat-value text-sm" style="font-size: 1.5rem;">
+            {% set kb = document.file_size / 1024 %}
+            {% if kb < 1024 %}
+                {{ "%.1f"|format(kb) }} KB
+            {% else %}
+                {{ "%.1f"|format(kb / 1024) }} MB
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="stat-card" style="border-left-color: #8b5cf6;">
+        <div class="stat-label">Last Updated</div>
+        <div class="stat-value text-sm" style="font-size: 1.25rem;">
+            {{ document.updated_at.strftime('%Y-%m-%d') if document.updated_at else 'N/A' }}
+        </div>
+        <div class="stat-change text-muted">
+            {{ document.updated_at.strftime('%H:%M') if document.updated_at else '' }}
+        </div>
+    </div>
+</div>
+
+<!-- Document Statistics -->
+{% if doc_stats %}
+<div class="card" style="margin-bottom: 2rem;">
+    <div class="card-header">
+        <h2 class="card-title">Statistics</h2>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;">
+        <div>
+            <div class="stat-label">First Tracked</div>
+            <div style="font-weight: 600; margin-top: 0.25rem;">
+                {{ doc_stats.first_version_date.strftime('%Y-%m-%d %H:%M') if doc_stats.first_version_date else 'N/A' }}
+            </div>
+        </div>
+
+        <div>
+            <div class="stat-label">Change Frequency</div>
+            <div style="font-weight: 600; margin-top: 0.25rem;">
+                Every {{ "%.1f"|format(doc_stats.change_frequency_days) }} days
+            </div>
+        </div>
+
+        <div>
+            <div class="stat-label">Total Storage</div>
+            <div style="font-weight: 600; margin-top: 0.25rem;">
+                {% set mb = doc_stats.total_size_bytes / 1024 / 1024 %}
+                {% if mb >= 1 %}
+                    {{ "%.2f"|format(mb) }} MB
+                {% else %}
+                    {{ "%.2f"|format(doc_stats.total_size_bytes / 1024) }} KB
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if doc_stats.change_types %}
+    <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
+        <div class="stat-label" style="margin-bottom: 0.75rem;">Change Type Breakdown</div>
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+            {% for change_type, count in doc_stats.change_types.items() %}
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                {% if change_type == 'created' %}
+                <span class="badge badge-success">{{ change_type }}</span>
+                {% elif change_type == 'modified' %}
+                <span class="badge badge-primary">{{ change_type }}</span>
+                {% elif change_type == 'restored' %}
+                <span class="badge badge-warning">{{ change_type }}</span>
+                {% else %}
+                <span class="badge badge-danger">{{ change_type }}</span>
+                {% endif %}
+                <span style="font-weight: 600;">{{ count }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Version History -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Version History</h2>
+    </div>
+
+    {% if versions %}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Version</th>
+                    <th>Change Type</th>
+                    <th>Hash</th>
+                    <th>Size</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for version in versions %}
+                <tr>
+                    <td>
+                        <strong>v{{ version.version_number }}</strong>
+                        {% if version.version_number == document.current_version %}
+                        <span class="badge badge-success" style="margin-left: 0.5rem;">Latest</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if version.change_type.value == 'created' %}
+                        <span class="badge badge-success">{{ version.change_type.value }}</span>
+                        {% elif version.change_type.value == 'modified' %}
+                        <span class="badge badge-primary">{{ version.change_type.value }}</span>
+                        {% elif version.change_type.value == 'restored' %}
+                        <span class="badge badge-warning">{{ version.change_type.value }}</span>
+                        {% else %}
+                        <span class="badge badge-danger">{{ version.change_type.value }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-muted">
+                        <code>{{ version.content_hash[:8] }}...</code>
+                    </td>
+                    <td class="text-sm">
+                        {% set kb = version.file_size / 1024 %}
+                        {% if kb < 1024 %}
+                            {{ "%.1f"|format(kb) }} KB
+                        {% else %}
+                            {{ "%.1f"|format(kb / 1024) }} MB
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-muted">
+                        {{ version.created_at.strftime('%Y-%m-%d %H:%M') if version.created_at else 'N/A' }}
+                    </td>
+                    <td>
+                        {% if version.version_number > 1 %}
+                        <a href="/documents/{{ document.id }}/diff/{{ version.version_number - 1 }}/{{ version.version_number }}" class="link">
+                            Compare
+                        </a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <h3>No version history</h3>
+        <p>This document has no tracked versions yet.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Metadata -->
+{% if document.metadata %}
+<div class="card mt-4">
+    <div class="card-header">
+        <h2 class="card-title">Metadata</h2>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+        {% for key, value in document.metadata.items() %}
+        <div>
+            <div class="stat-label">{{ key }}</div>
+            <div style="margin-top: 0.25rem; word-break: break-word;">
+                {{ value }}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

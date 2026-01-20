@@ -1,0 +1,163 @@
+# Multi-Provider Notification Example
+#
+# This example shows how to configure multiple notification providers
+# to send alerts to different channels simultaneously.
+#
+# Use case: Send critical document changes to multiple teams and systems
+
+storage:
+  backend: sqlite
+  sqlite:
+    db_path: ragversion.db
+
+notifications:
+  enabled: true
+  notifiers:
+    # Slack for immediate dev team alerts
+    - type: slack
+      name: dev-team-slack
+      enabled: true
+      webhook_url: ${SLACK_WEBHOOK_URL}  # Use environment variable
+      channel: "#documents"
+      username: RAGVersion
+      mention_users: ["U123456"]
+      mention_on_types: ["deleted"]
+
+    # Discord for engineering channel
+    - type: discord
+      name: eng-discord
+      enabled: true
+      webhook_url: ${DISCORD_WEBHOOK_URL}  # Use environment variable
+      username: RAGVersion
+      mention_users: ["123456789"]
+      mention_on_types: ["deleted"]
+
+    # Email for compliance team
+    - type: email
+      name: compliance-email
+      enabled: true
+      smtp_host: smtp.gmail.com
+      smtp_port: 587
+      smtp_username: ${EMAIL_USERNAME}  # Use environment variable
+      smtp_password: ${EMAIL_PASSWORD}  # Use environment variable
+      use_tls: true
+      from_address: ragversion@company.com
+      to_addresses:
+        - compliance@company.com
+        - legal@company.com
+      subject_prefix: "[RAGVersion - Compliance]"
+
+    # Email for management team (less frequent)
+    - type: email
+      name: management-email
+      enabled: false  # Enable manually for critical changes only
+      smtp_host: smtp.gmail.com
+      smtp_port: 587
+      smtp_username: ${EMAIL_USERNAME}
+      smtp_password: ${EMAIL_PASSWORD}
+      use_tls: true
+      from_address: ragversion@company.com
+      to_addresses:
+        - cto@company.com
+        - vp-engineering@company.com
+      subject_prefix: "[RAGVersion - Management Alert]"
+
+    # Webhook for automation system
+    - type: webhook
+      name: automation-trigger
+      enabled: true
+      url: ${AUTOMATION_WEBHOOK_URL}  # Use environment variable
+      method: POST
+      headers:
+        Authorization: Bearer ${API_TOKEN}  # Use environment variable
+        X-Environment: production
+        X-Source: ragversion
+
+    # Webhook for audit log system
+    - type: webhook
+      name: audit-logger
+      enabled: true
+      url: https://audit.company.com/api/events
+      method: POST
+      headers:
+        Authorization: Bearer ${AUDIT_API_TOKEN}
+      include_metadata: true
+
+# Environment Variables Setup:
+#
+# Create a .env file with your credentials:
+#
+# SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+# DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR/WEBHOOK
+# EMAIL_USERNAME=your-email@gmail.com
+# EMAIL_PASSWORD=your-app-password
+# AUTOMATION_WEBHOOK_URL=https://automation.company.com/webhook
+# API_TOKEN=your-automation-api-token
+# AUDIT_API_TOKEN=your-audit-api-token
+
+# Benefits of Multi-Provider Setup:
+#
+# 1. Redundancy: If one provider fails, others still work
+# 2. Audience-specific: Different teams get notifications via their preferred channels
+# 3. Compliance: Separate audit trails for compliance requirements
+# 4. Automation: Trigger different workflows based on changes
+# 5. Flexibility: Enable/disable providers as needed
+
+# Managing Notifiers Programmatically:
+#
+# from ragversion.config import RAGVersionConfig
+# from ragversion.notifications import create_notification_manager
+#
+# config = RAGVersionConfig.load("multi_provider_example.yaml")
+# manager = create_notification_manager(config.notifications.notifiers)
+#
+# # Disable specific notifier
+# manager.disable_notifier("management-email")
+#
+# # Enable for critical event
+# manager.enable_notifier("management-email")
+#
+# # List all notifiers
+# notifiers = manager.list_notifiers()
+# for notifier in notifiers:
+#     print(f"{notifier['name']}: {notifier['enabled']}")
+
+# Example usage:
+#
+# CLI:
+#   # Start file watcher with multi-provider notifications
+#   ragversion watch ./documents --patterns "*.pdf" "*.docx" --verbose
+#
+# Python:
+#   from ragversion import AsyncVersionTracker
+#   from ragversion.storage.sqlite import SQLiteStorage
+#   from ragversion.config import RAGVersionConfig
+#   from ragversion.notifications import create_notification_manager
+#
+#   # Load config with all notifiers
+#   config = RAGVersionConfig.load("multi_provider_example.yaml")
+#   notification_manager = create_notification_manager(config.notifications.notifiers)
+#
+#   # Create tracker
+#   storage = SQLiteStorage(config.sqlite.db_path)
+#   tracker = AsyncVersionTracker(
+#       storage=storage,
+#       notification_manager=notification_manager
+#   )
+#
+#   # Track with environment metadata
+#   async with tracker:
+#       metadata = {
+#           "environment": "production",
+#           "criticality": "high",
+#           "department": "engineering"
+#       }
+#       result = await tracker.track_directory(
+#           "./documents",
+#           patterns=["*.pdf", "*.docx"],
+#           metadata=metadata
+#       )
+#
+#       # All enabled notifiers will receive notifications
+#       print(f"Tracked {len(result.successful)} changes")
+#       print(f"Sent to {len(notification_manager)} notifiers")

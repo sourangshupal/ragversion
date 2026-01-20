@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - RAGVersion{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 2rem;">Dashboard</h1>
+
+<!-- Statistics Overview -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">Total Documents</div>
+        <div class="stat-value">{{ stats.total_documents|default(0)|int|string }}</div>
+        <div class="stat-change">
+            {% if stats.recent_changes %}
+            +{{ stats.recent_changes }} in last 7 days
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="stat-card" style="border-left-color: #10b981;">
+        <div class="stat-label">Total Versions</div>
+        <div class="stat-value">{{ stats.total_versions|default(0)|int|string }}</div>
+        <div class="stat-change text-muted">
+            {{ "%.2f"|format(stats.average_versions_per_document|default(0)) }} avg per document
+        </div>
+    </div>
+
+    <div class="stat-card" style="border-left-color: #f59e0b;">
+        <div class="stat-label">Storage Used</div>
+        <div class="stat-value">
+            {% set mb = (stats.total_storage_bytes|default(0) / 1024 / 1024) %}
+            {% if mb >= 1 %}
+                {{ "%.2f"|format(mb) }} MB
+            {% else %}
+                {{ "%.2f"|format(stats.total_storage_bytes|default(0) / 1024) }} KB
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="stat-card" style="border-left-color: #ef4444;">
+        <div class="stat-label">Recent Activity</div>
+        <div class="stat-value">{{ stats.recent_activity_count|default(0) }}</div>
+        <div class="stat-change text-muted">
+            Last 7 days
+        </div>
+    </div>
+</div>
+
+<!-- Top Documents by Version Count -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Top Documents</h2>
+        <a href="/documents" class="btn btn-primary">View All</a>
+    </div>
+
+    {% if top_docs %}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>File Name</th>
+                    <th>Type</th>
+                    <th>Versions</th>
+                    <th>Size</th>
+                    <th>Last Updated</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in top_docs %}
+                <tr>
+                    <td>
+                        <strong>{{ doc.file_name }}</strong><br>
+                        <span class="text-muted text-sm">{{ doc.file_path }}</span>
+                    </td>
+                    <td>
+                        <span class="badge badge-primary">{{ doc.file_type }}</span>
+                    </td>
+                    <td>
+                        <strong>{{ doc.version_count }}</strong>
+                    </td>
+                    <td class="text-sm">
+                        {% set kb = doc.file_size / 1024 %}
+                        {% if kb < 1024 %}
+                            {{ "%.1f"|format(kb) }} KB
+                        {% else %}
+                            {{ "%.1f"|format(kb / 1024) }} MB
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-muted">
+                        {{ doc.updated_at.strftime('%Y-%m-%d %H:%M') if doc.updated_at else 'N/A' }}
+                    </td>
+                    <td>
+                        <a href="/documents/{{ doc.id }}" class="link">View</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <h3>No documents tracked yet</h3>
+        <p>Start tracking documents using the CLI: <code>ragversion track ./documents</code></p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- File Type Distribution -->
+{% if stats.documents_by_file_type %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">File Type Distribution</h2>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>File Type</th>
+                    <th>Count</th>
+                    <th>Percentage</th>
+                    <th style="width: 50%;">Distribution</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for file_type, count in stats.documents_by_file_type.items()|sort(attribute=1, reverse=True) %}
+                <tr>
+                    <td>
+                        <span class="badge badge-primary">{{ file_type }}</span>
+                    </td>
+                    <td><strong>{{ count }}</strong></td>
+                    <td>
+                        {% set percent = (count / stats.total_documents * 100) if stats.total_documents > 0 else 0 %}
+                        {{ "%.1f"|format(percent) }}%
+                    </td>
+                    <td>
+                        <div style="background: #e2e8f0; border-radius: 4px; height: 20px; position: relative; overflow: hidden;">
+                            {% set percent = (count / stats.total_documents * 100) if stats.total_documents > 0 else 0 %}
+                            <div style="background: #3b82f6; height: 100%; width: {{ percent }}%; border-radius: 4px;"></div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

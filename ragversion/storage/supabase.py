@@ -9,7 +9,7 @@ from uuid import UUID
 
 from supabase import create_client, Client
 from ragversion.exceptions import StorageError, DocumentNotFoundError, VersionNotFoundError
-from ragversion.models import Document, Version, DiffResult, StorageStatistics, DocumentStatistics
+from ragversion.models import Document, Version, DiffResult, StorageStatistics, DocumentStatistics, Chunk
 from ragversion.storage.base import BaseStorage
 
 
@@ -79,6 +79,9 @@ class SupabaseStorage(BaseStorage):
     async def _ensure_tables(self) -> None:
         """Ensure required tables exist. Note: This assumes tables are created via Supabase migrations."""
         # In production, tables should be created via Supabase migrations
+        # Required migrations:
+        #   - 001_initial_schema.sql: Core documents, versions, and content_snapshots tables
+        #   - 002_chunk_versioning.sql: Chunk-level versioning (v0.10.0+)
         # This is a placeholder for checking table existence
         pass
 
@@ -89,6 +92,42 @@ class SupabaseStorage(BaseStorage):
         return self.client
 
     # Document operations
+
+    async def batch_create_documents(self, documents: List[Document]) -> List[Document]:
+        """Create multiple document records in a single API call (optimized)."""
+        if not documents:
+            return []
+
+        try:
+            client = self._ensure_client()
+
+            # Prepare batch data
+            batch_data = [
+                {
+                    "id": str(doc.id),
+                    "file_path": doc.file_path,
+                    "file_name": doc.file_name,
+                    "file_type": doc.file_type,
+                    "file_size": doc.file_size,
+                    "content_hash": doc.content_hash,
+                    "created_at": doc.created_at.isoformat(),
+                    "updated_at": doc.updated_at.isoformat(),
+                    "version_count": doc.version_count,
+                    "current_version": doc.current_version,
+                    "metadata": json.dumps(doc.metadata),
+                }
+                for doc in documents
+            ]
+
+            # Execute batch insert in single API call
+            result = client.table("documents").insert(batch_data).execute()
+
+            if not result.data or len(result.data) != len(documents):
+                raise StorageError(f"Failed to create all {len(documents)} documents")
+
+            return documents
+        except Exception as e:
+            raise StorageError(f"Failed to batch create {len(documents)} documents", e)
 
     async def create_document(self, document: Document) -> Document:
         """Create a new document record."""
@@ -292,6 +331,59 @@ class SupabaseStorage(BaseStorage):
             raise StorageError("Failed to search documents", e)
 
     # Version operations
+
+    async def batch_create_versions(self, versions: List[Version]) -> List[Version]:
+        """Create multiple version records in a single API call (optimized)."""
+        if not versions:
+            return []
+
+        try:
+            client = self._ensure_client()
+
+            # Prepare batch data for versions
+            batch_data = [
+                {
+                    "id": str(ver.id),
+                    "document_id": str(ver.document_id),
+                    "version_number": ver.version_number,
+                    "content_hash": ver.content_hash,
+                    "file_size": ver.file_size,
+                    "change_type": ver.change_type.value,
+                    "created_at": ver.created_at.isoformat(),
+                    "created_by": ver.created_by,
+                    "metadata": json.dumps(ver.metadata),
+                }
+                for ver in versions
+            ]
+
+            # Execute batch insert for versions
+            result = client.table("versions").insert(batch_data).execute()
+
+            if not result.data or len(result.data) != len(versions):
+                raise StorageError(f"Failed to create all {len(versions)} versions")
+
+            # Store content for versions that have it (batch if possible)
+            content_batch = []
+            for ver in versions:
+                if ver.content:
+                    content_data = ver.content.encode("utf-8")
+                    if self.content_compression:
+                        content_data = gzip.compress(content_data)
+
+                    content_batch.append({
+                        "version_id": str(ver.id),
+                        "content": content_data.hex(),
+                        "compressed": self.content_compression,
+                        "created_at": datetime.utcnow().isoformat(),
+                    })
+
+            # Batch insert content if any
+            if content_batch:
+                client.table("content_snapshots").insert(content_batch).execute()
+
+            return versions
+        except Exception as e:
+            raise StorageError(f"Failed to batch create {len(versions)} versions", e)
 
     async def create_version(self, version: Version) -> Version:
         """Create a new version record."""
@@ -520,6 +612,215 @@ class SupabaseStorage(BaseStorage):
             client.table("content_snapshots").delete().eq("version_id", str(version_id)).execute()
         except Exception as e:
             raise StorageError(f"Failed to delete content for version {version_id}", e)
+
+    # Chunk operations (v0.10.0 - Chunk-level versioning)
+
+    async def create_chunks_batch(self, chunks: List[Chunk]) -> List[Chunk]:
+        """Create multiple chunks in a batch using Supabase insert."""
+        if not chunks:
+            return []
+
+        try:
+            client = self._ensure_client()
+
+            # Prepare chunk data for batch insert
+            chunk_data = [
+                {
+                    "id": str(chunk.id),
+                    "document_id": str(chunk.document_id),
+                    "version_id": str(chunk.version_id),
+                    "chunk_index": chunk.chunk_index,
+                    "content_hash": chunk.content_hash,
+                    "token_count": chunk.token_count,
+                    "created_at": chunk.created_at.isoformat(),
+                    "metadata": chunk.metadata if chunk.metadata else {},
+                }
+                for chunk in chunks
+            ]
+
+            # Batch insert chunks
+            client.table("chunks").insert(chunk_data).execute()
+
+            # Batch store chunk content (if present in metadata)
+            content_data = []
+            for chunk in chunks:
+                if "content" in chunk.metadata:
+                    text = chunk.metadata["content"]
+                    data = text.encode("utf-8")
+                    if self.content_compression:
+                        data = gzip.compress(data)
+                    content_data.append(
+                        {
+                            "chunk_id": str(chunk.id),
+                            "content": data.hex(),  # Store as hex string
+                            "compressed": self.content_compression,
+                            "created_at": datetime.utcnow().isoformat(),
+                        }
+                    )
+
+            if content_data:
+                client.table("chunk_content").insert(content_data).execute()
+
+            return chunks
+        except Exception as e:
+            raise StorageError(f"Failed to batch create {len(chunks)} chunks", e)
+
+    async def create_chunk(self, chunk: Chunk) -> Chunk:
+        """Create a single chunk record."""
+        try:
+            client = self._ensure_client()
+
+            chunk_data = {
+                "id": str(chunk.id),
+                "document_id": str(chunk.document_id),
+                "version_id": str(chunk.version_id),
+                "chunk_index": chunk.chunk_index,
+                "content_hash": chunk.content_hash,
+                "token_count": chunk.token_count,
+                "created_at": chunk.created_at.isoformat(),
+                "metadata": chunk.metadata if chunk.metadata else {},
+            }
+
+            client.table("chunks").insert(chunk_data).execute()
+
+            # Store content if present
+            if "content" in chunk.metadata:
+                await self.store_chunk_content(
+                    chunk.id, chunk.metadata["content"], self.content_compression
+                )
+
+            return chunk
+        except Exception as e:
+            raise StorageError(f"Failed to create chunk {chunk.id}", e)
+
+    async def get_chunk_by_id(self, chunk_id: UUID) -> Optional[Chunk]:
+        """Get a chunk by its ID."""
+        try:
+            client = self._ensure_client()
+
+            result = client.table("chunks").select("*").eq("id", str(chunk_id)).execute()
+
+            if not result.data:
+                return None
+
+            data = result.data[0]
+            return Chunk(
+                id=UUID(data["id"]),
+                document_id=UUID(data["document_id"]),
+                version_id=UUID(data["version_id"]),
+                chunk_index=data["chunk_index"],
+                content_hash=data["content_hash"],
+                token_count=data["token_count"],
+                created_at=datetime.fromisoformat(data["created_at"]),
+                metadata=data.get("metadata", {}),
+            )
+        except Exception as e:
+            raise StorageError(f"Failed to get chunk {chunk_id}", e)
+
+    async def get_chunks_by_version(self, version_id: UUID) -> List[Chunk]:
+        """Get all chunks for a specific version, ordered by chunk_index."""
+        try:
+            client = self._ensure_client()
+
+            result = (
+                client.table("chunks")
+                .select("*")
+                .eq("version_id", str(version_id))
+                .order("chunk_index")
+                .execute()
+            )
+
+            chunks = []
+            for data in result.data:
+                chunk = Chunk(
+                    id=UUID(data["id"]),
+                    document_id=UUID(data["document_id"]),
+                    version_id=UUID(data["version_id"]),
+                    chunk_index=data["chunk_index"],
+                    content_hash=data["content_hash"],
+                    token_count=data["token_count"],
+                    created_at=datetime.fromisoformat(data["created_at"]),
+                    metadata=data.get("metadata", {}),
+                )
+                chunks.append(chunk)
+
+            return chunks
+        except Exception as e:
+            raise StorageError(f"Failed to get chunks for version {version_id}", e)
+
+    async def store_chunk_content(
+        self,
+        chunk_id: UUID,
+        content: str,
+        compress: bool = True,
+    ) -> None:
+        """Store chunk content separately (optionally compressed)."""
+        try:
+            client = self._ensure_client()
+
+            # Prepare content
+            content_data = content.encode("utf-8")
+            if compress:
+                content_data = gzip.compress(content_data)
+
+            data = {
+                "chunk_id": str(chunk_id),
+                "content": content_data.hex(),  # Store as hex string
+                "compressed": compress,
+                "created_at": datetime.utcnow().isoformat(),
+            }
+
+            # Upsert (insert or update)
+            client.table("chunk_content").upsert(data).execute()
+        except Exception as e:
+            raise StorageError(f"Failed to store content for chunk {chunk_id}", e)
+
+    async def get_chunk_content(self, chunk_id: UUID) -> Optional[str]:
+        """Retrieve chunk content (automatically decompressed)."""
+        try:
+            client = self._ensure_client()
+
+            result = (
+                client.table("chunk_content")
+                .select("content, compressed")
+                .eq("chunk_id", str(chunk_id))
+                .execute()
+            )
+
+            if not result.data:
+                return None
+
+            data = result.data[0]
+            content_data = bytes.fromhex(data["content"])
+
+            # Decompress if needed
+            if data.get("compressed", False):
+                content_data = gzip.decompress(content_data)
+
+            return content_data.decode("utf-8")
+        except Exception as e:
+            raise StorageError(f"Failed to get content for chunk {chunk_id}", e)
+
+    async def delete_chunks_by_version(self, version_id: UUID) -> int:
+        """Delete all chunks associated with a version."""
+        try:
+            client = self._ensure_client()
+
+            # Get count before deletion
+            result = (
+                client.table("chunks")
+                .select("id", count="exact")
+                .eq("version_id", str(version_id))
+                .execute()
+            )
+            count = result.count if result.count else 0
+
+            # Delete chunks (cascade will delete chunk_content)
+            client.table("chunks").delete().eq("version_id", str(version_id)).execute()
+
+            return count
+        except Exception as e:
+            raise StorageError(f"Failed to delete chunks for version {version_id}", e)
 
     # Diff operations
 

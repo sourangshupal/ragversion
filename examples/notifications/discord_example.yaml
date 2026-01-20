@@ -1,0 +1,70 @@
+# Discord Notification Example
+#
+# This example shows how to configure Discord notifications for document changes.
+#
+# Setup:
+# 1. Go to Discord channel settings
+# 2. Navigate to "Integrations" → "Webhooks"
+# 3. Click "New Webhook"
+# 4. Copy the webhook URL below
+
+storage:
+  backend: sqlite
+  sqlite:
+    db_path: ragversion.db
+
+notifications:
+  enabled: true
+  notifiers:
+    - type: discord
+      name: dev-discord
+      enabled: true
+
+      # Required: Discord webhook URL
+      webhook_url: https://discord.com/api/webhooks/YOUR/WEBHOOK/ID
+
+      # Optional: Bot display name
+      username: RAGVersion
+
+      # Optional: Bot avatar URL
+      avatar_url: https://example.com/ragversion-avatar.png
+
+      # Optional: User IDs to mention (format: 123456789)
+      # Find user ID: Settings → Advanced → Enable Developer Mode
+      # Then: Right-click user → Copy ID
+      mention_users:
+        - "123456789"
+        - "987654321"
+
+      # Optional: Role IDs to mention (format: 123456789)
+      # Right-click role → Copy ID
+      mention_roles:
+        - "555555555"
+
+      # Optional: Only mention users/roles for these change types
+      # Options: created, modified, deleted, restored
+      mention_on_types:
+        - deleted  # Only mention when documents are deleted
+
+      # Optional: Request timeout in seconds
+      timeout_seconds: 30
+
+# Example usage:
+#
+# CLI:
+#   ragversion watch ./documents --patterns "*.pdf" "*.docx"
+#
+# Python:
+#   from ragversion import AsyncVersionTracker
+#   from ragversion.storage.sqlite import SQLiteStorage
+#   from ragversion.config import RAGVersionConfig
+#   from ragversion.notifications import create_notification_manager
+#
+#   config = RAGVersionConfig.load("discord_example.yaml")
+#   notification_manager = create_notification_manager(config.notifications.notifiers)
+#
+#   storage = SQLiteStorage(config.sqlite.db_path)
+#   tracker = AsyncVersionTracker(storage=storage, notification_manager=notification_manager)
+#
+#   async with tracker:
+#       result = await tracker.track_directory("./documents")

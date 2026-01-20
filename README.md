@@ -40,16 +40,22 @@ RAGVersion is a plug-and-play module that tracks document changes and integrates
 - 🚀 **Async-first architecture** - Built for modern Python async/await patterns
 - 📦 **Plug-and-play** - Works with any RAG system
 - 🔄 **Batch processing** - Efficiently process large document collections
+- 👀 **Real-time file watching** - Automatic tracking with daemon mode
 - 🛡️ **Resilient** - Continue-on-error design for production systems
 
 </td>
 <td width="50%">
 
 ### Integrations & Storage
-- 💾 **Supabase integration** - Primary storage backend with PostgreSQL
+- 💾 **Zero-config SQLite** - Default local storage, no setup required
+- ☁️ **Supabase option** - Cloud storage with PostgreSQL
+- 🌐 **REST API** - FastAPI-based HTTP API with automatic OpenAPI docs
 - 🔗 **Framework integrations** - LangChain & LlamaIndex ready
 - 📝 **Document parsing** - PDF, DOCX, TXT, Markdown support
 - 🔍 **Change detection** - Automatic tracking with content hashing
+- ⚡ **GitHub Actions** - Automatic tracking in CI/CD pipelines
+- 🔔 **Smart notifications** - Slack, Discord, Email, and webhook alerts
+- ⚡ **Query optimization** - 100-1000x faster queries with comprehensive indexing
 
 </td>
 </tr>
@@ -78,6 +84,9 @@ pip install ragversion
 # With all parsers
 pip install ragversion[parsers]
 
+# With REST API support
+pip install ragversion[api]
+
 # With LangChain integration
 pip install ragversion[langchain]
 
@@ -90,7 +99,7 @@ pip install ragversion[all]
 
 **System Requirements:**
 - Python 3.9+
-- Supabase account (free tier available)
+- (Optional) Supabase account for cloud storage
 
 <details>
 <summary>📋 Optional Dependencies</summary>
@@ -104,17 +113,29 @@ pip install ragversion[all]
 
 ## 🚀 Quick Start
 
-### Basic Usage
+### Zero-Config Setup (SQLite - Recommended for Getting Started)
+
+```bash
+# 1. Install RAGVersion
+pip install ragversion[all]
+
+# 2. Start tracking immediately - no configuration needed!
+ragversion track ./documents
+
+# That's it! RAGVersion uses SQLite by default (ragversion.db)
+```
+
+### Basic Usage (Python)
 
 ```python
 import asyncio
 from ragversion import AsyncVersionTracker
-from ragversion.storage import SupabaseStorage
+from ragversion.storage import SQLiteStorage
 
 async def main():
-    # Initialize tracker
+    # Initialize tracker with SQLite (zero configuration)
     tracker = AsyncVersionTracker(
-        storage=SupabaseStorage.from_env()
+        storage=SQLiteStorage()  # Creates ragversion.db automatically
     )
 
     # Track a single file
@@ -135,7 +156,8 @@ async def main():
 asyncio.run(main())
 ```
 
-### 30-Second Setup
+<details>
+<summary>☁️ Cloud Setup (Supabase - For Production/Collaboration)</summary>
 
 ```bash
 # 1. Install RAGVersion
@@ -145,27 +167,56 @@ pip install ragversion[all]
 export SUPABASE_URL="https://your-project.supabase.co"
 export SUPABASE_SERVICE_KEY="your-service-key"
 
-# 3. Initialize database
+# 3. Configure backend
+echo "storage:
+  backend: supabase
+  supabase:
+    url: \${SUPABASE_URL}
+    key: \${SUPABASE_SERVICE_KEY}" > ragversion.yaml
+
+# 4. Initialize database
 ragversion migrate
 
-# 4. Start tracking!
+# 5. Start tracking!
 ragversion track ./documents
 ```
+
+**Python usage with Supabase:**
+```python
+from ragversion.storage import SupabaseStorage
+
+async def main():
+    tracker = AsyncVersionTracker(
+        storage=SupabaseStorage.from_env()
+    )
+    # ... rest of your code
+```
+
+</details>
 
 ---
 
 ## ⚙️ Configuration
 
-### Option 1: Configuration File
+### Default (SQLite) - No Configuration Required
 
-Create a `ragversion.yaml` file in your project root:
+RAGVersion works out of the box with SQLite. No setup needed!
+
+```bash
+# Just start tracking - uses ragversion.db by default
+ragversion track ./documents
+```
+
+### Custom Configuration File (Optional)
+
+Create a `ragversion.yaml` file for advanced settings:
 
 ```yaml
 storage:
-  backend: supabase
-  supabase:
-    url: ${SUPABASE_URL}
-    key: ${SUPABASE_SERVICE_KEY}
+  backend: sqlite  # or "supabase" for cloud storage
+  sqlite:
+    db_path: ragversion.db
+    content_compression: true
 
 tracking:
   store_content: true
@@ -179,9 +230,22 @@ content:
   ttl_days: 365
 ```
 
-### Option 2: Environment Variables
+### Switching to Supabase (Cloud Storage)
+
+For production or team collaboration:
+
+```yaml
+storage:
+  backend: supabase
+  supabase:
+    url: ${SUPABASE_URL}
+    key: ${SUPABASE_SERVICE_KEY}
+```
+
+Or use environment variables:
 
 ```bash
+export RAGVERSION_STORAGE_BACKEND=supabase
 export SUPABASE_URL="https://your-project.supabase.co"
 export SUPABASE_SERVICE_KEY="your-service-key"
 ```
@@ -213,6 +277,28 @@ content:
   compression_level: 6
   ttl_days: 365
 
+notifications:
+  enabled: true
+  notifiers:
+    - type: slack
+      name: team-slack
+      enabled: true
+      webhook_url: ${SLACK_WEBHOOK_URL}
+    - type: discord
+      name: dev-discord
+      enabled: true
+      webhook_url: ${DISCORD_WEBHOOK_URL}
+    - type: email
+      name: admin-email
+      enabled: true
+      smtp_host: smtp.gmail.com
+      smtp_port: 587
+      smtp_username: ${EMAIL_USERNAME}
+      smtp_password: ${EMAIL_PASSWORD}
+      from_address: ragversion@company.com
+      to_addresses:
+        - admin@company.com
+
 events:
   enabled: true
   handlers:
@@ -221,6 +307,219 @@ events:
 ```
 
 </details>
+
+---
+
+## ⚡ GitHub Actions Integration
+
+Automatically track documentation changes in your CI/CD pipeline:
+
+```yaml
+# .github/workflows/track-docs.yml
+name: Track Documentation
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/**', '*.md']
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Track documentation with RAGVersion
+        uses: sourangshupal/ragversion/.github/actions/ragversion-track@v0.4.0
+        with:
+          paths: 'docs/ README.md'
+          storage-backend: 'sqlite'
+          file-patterns: '*.md *.txt *.pdf'
+```
+
+**Benefits:**
+- ✅ Automatic tracking on every commit
+- ✅ PR documentation validation
+- ✅ Scheduled tracking jobs
+- ✅ Zero manual intervention
+- ✅ Archive tracking history as artifacts
+
+**Common Use Cases:**
+
+<table>
+<tr>
+<td width="50%">
+
+**PR Checks**
+```yaml
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  check-docs:
+    steps:
+      - uses: sourangshupal/ragversion/.github/actions/ragversion-track@v0.4.0
+        with:
+          paths: 'docs/'
+          fail-on-error: true
+```
+
+</td>
+<td width="50%">
+
+**Scheduled Tracking**
+```yaml
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Daily
+
+jobs:
+  track:
+    steps:
+      - uses: sourangshupal/ragversion/.github/actions/ragversion-track@v0.4.0
+        with:
+          paths: 'docs/ examples/'
+          max-workers: 8
+```
+
+</td>
+</tr>
+</table>
+
+📖 **Full documentation:** [docs/GITHUB_ACTIONS.md](docs/GITHUB_ACTIONS.md)
+
+---
+
+## 👀 Real-Time File Watching
+
+Automatically track document changes without manual intervention:
+
+```bash
+# Start watching a directory
+ragversion watch ./docs
+
+# Watch only Markdown files
+ragversion watch ./docs --pattern "*.md"
+
+# Watch multiple directories
+ragversion watch ./docs ./guides --pattern "*.md" --pattern "*.txt"
+```
+
+**Features:**
+- ✅ Real-time change detection (create, modify, delete)
+- ✅ Pattern matching for specific file types
+- ✅ Recursive directory watching
+- ✅ Automatic debouncing
+- ✅ Custom change callbacks
+- ✅ Daemon mode for 24/7 monitoring
+
+**Python API:**
+
+```python
+from ragversion import watch_directory
+
+async def on_change(change):
+    print(f"📄 {change.change_type.value}: {change.file_name}")
+
+async def main():
+    async with AsyncVersionTracker(storage=storage) as tracker:
+        await watch_directory(
+            tracker,
+            "./docs",
+            patterns=["*.md", "*.txt"],
+            on_change=on_change
+        )
+
+asyncio.run(main())
+```
+
+**Use Cases:**
+- 🔄 Development environment (auto-track while editing)
+- 🚀 Production monitoring (24/7 daemon mode)
+- 🔔 Custom notifications (Slack, email, webhooks)
+- 🤖 RAG integration (auto-update vector stores)
+
+📖 **Full documentation:** [docs/FILE_WATCHING.md](docs/FILE_WATCHING.md)
+
+---
+
+## 🔔 Notifications
+
+Get real-time alerts when documents change via Slack, Discord, Email, or custom webhooks.
+
+```yaml
+# ragversion.yaml
+notifications:
+  enabled: true
+  notifiers:
+    - type: slack
+      name: team-slack
+      enabled: true
+      webhook_url: ${SLACK_WEBHOOK_URL}
+      mention_on_types: ["deleted"]  # Mention users for deletions
+
+    - type: discord
+      name: dev-discord
+      enabled: true
+      webhook_url: ${DISCORD_WEBHOOK_URL}
+
+    - type: email
+      name: admin-email
+      enabled: true
+      smtp_host: smtp.gmail.com
+      smtp_port: 587
+      smtp_username: ${EMAIL_USERNAME}
+      smtp_password: ${EMAIL_PASSWORD}
+      from_address: ragversion@company.com
+      to_addresses:
+        - admin@company.com
+```
+
+**Supported Providers:**
+- 💬 **Slack** - Rich formatted messages with user mentions
+- 🎮 **Discord** - Embed-based notifications with role mentions
+- 📧 **Email** - HTML/plain text via SMTP
+- 🔗 **Webhook** - Custom HTTP endpoints for any integration
+
+**Features:**
+- ✅ Multiple providers simultaneously
+- ✅ Parallel or sequential delivery
+- ✅ Conditional notifications (e.g., only for deletions)
+- ✅ User/role mentions
+- ✅ Custom metadata in messages
+- ✅ Automatic retry and error handling
+
+**CLI Usage:**
+```bash
+# Notifications are sent automatically with file watching
+ragversion watch ./documents --config ragversion.yaml
+```
+
+**Python API:**
+```python
+from ragversion.notifications import create_notification_manager
+from ragversion.config import RAGVersionConfig
+
+# Load config with notifications
+config = RAGVersionConfig.load("ragversion.yaml")
+notification_manager = create_notification_manager(
+    config.notifications.notifiers
+)
+
+# Create tracker with notifications
+tracker = AsyncVersionTracker(
+    storage=storage,
+    notification_manager=notification_manager
+)
+
+async with tracker:
+    await tracker.track("./documents/report.pdf")
+    # Notifications sent automatically
+```
+
+📖 **Full documentation:** [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md)
+📝 **Examples:** [examples/notifications/](examples/notifications/)
 
 ---
 
@@ -391,6 +690,168 @@ Commands:
 ```
 
 </details>
+
+---
+
+## 🖥️ Web Interface
+
+RAGVersion includes a simple, clean web interface perfect for content teams and non-technical users:
+
+```bash
+# Start the server (includes web UI + REST API)
+ragversion serve
+
+# Access the web interface
+# Dashboard: http://localhost:8000/
+# Documents: http://localhost:8000/documents
+```
+
+**Web UI Features:**
+- 📊 **Dashboard** - Statistics overview, top documents, file type distribution
+- 📄 **Document Browser** - Search, filter, and browse all tracked documents
+- 📈 **Version History** - View complete version timeline for each document
+- 🔍 **Visual Diff Viewer** - Compare versions with color-coded changes
+- 🎨 **Clean Design** - Modern, responsive interface with intuitive navigation
+- 🚀 **Fast & Lightweight** - Server-side rendering, no heavy JavaScript frameworks
+
+**Perfect for:**
+- Content managers who need to track document changes visually
+- Non-technical stakeholders who want quick insights
+- Teams that prefer web interfaces over command-line tools
+- Quick browsing and searching through document history
+
+**Screenshots:**
+
+<table>
+<tr>
+<td width="50%">
+
+**Dashboard View:**
+- Total documents, versions, storage used
+- Recent activity metrics
+- Top documents by version count
+- File type distribution chart
+
+</td>
+<td width="50%">
+
+**Document Detail:**
+- Complete version history
+- Change statistics and frequency
+- Visual badges for change types
+- Version comparison links
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🌐 REST API
+
+RAGVersion also provides a comprehensive REST API for programmatic access from any language or platform:
+
+```bash
+# Start the API server (same command as web UI)
+ragversion serve
+
+# Custom host and port
+ragversion serve --host localhost --port 5000
+
+# Development mode with auto-reload
+ragversion serve --reload
+```
+
+**API Features:**
+- 🚀 **FastAPI-based** - Modern async web framework
+- 📖 **Auto documentation** - Swagger UI at `/api/docs`, ReDoc at `/api/redoc`
+- 🔐 **Optional auth** - API key authentication via `X-API-Key` header
+- 🌍 **CORS support** - Configurable cross-origin requests
+- ⚡ **Async operations** - Non-blocking request handling
+- ✅ **Type validation** - Automatic request/response validation with Pydantic
+
+### Quick API Examples
+
+<table>
+<tr>
+<td width="50%">
+
+**Python:**
+```python
+import requests
+
+BASE_URL = "http://localhost:8000/api"
+
+# Track a file
+response = requests.post(
+    f"{BASE_URL}/track/file",
+    json={"file_path": "/path/to/doc.pdf"}
+)
+event = response.json()
+
+# List documents
+docs = requests.get(
+    f"{BASE_URL}/documents?limit=10"
+).json()
+
+# Get statistics
+stats = requests.get(
+    f"{BASE_URL}/statistics"
+).json()
+```
+
+</td>
+<td width="50%">
+
+**JavaScript:**
+```javascript
+const BASE_URL = "http://localhost:8000/api";
+
+// Track a file
+const response = await fetch(
+  `${BASE_URL}/track/file`,
+  {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      file_path: "/path/to/doc.pdf"
+    })
+  }
+);
+const event = await response.json();
+
+// Get version history
+const versions = await fetch(
+  `${BASE_URL}/versions/document/${docId}`
+).then(r => r.json());
+```
+
+</td>
+</tr>
+</table>
+
+**cURL Examples:**
+```bash
+# Track directory
+curl -X POST http://localhost:8000/api/track/directory \
+  -H "Content-Type: application/json" \
+  -d '{"dir_path": "/docs", "patterns": ["*.md"]}'
+
+# Get diff between versions
+curl "http://localhost:8000/api/versions/document/<doc-id>/diff/1/3"
+
+# Health check
+curl http://localhost:8000/api/health
+```
+
+**API Endpoints:**
+- `/api/documents` - Document management (list, get, search, delete)
+- `/api/versions` - Version management (list, get, content, diff, restore)
+- `/api/track` - Tracking operations (file, directory)
+- `/api/statistics` - Analytics and statistics
+- `/api/health` - Server health check
+
+See the [API Guide](docs/API_GUIDE.md) for complete documentation.
 
 ---
 

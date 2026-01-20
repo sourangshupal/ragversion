@@ -11,7 +11,8 @@ from ragversion.models import (
     DocumentStatistics,
 )
 from ragversion.tracker import AsyncVersionTracker
-from ragversion.storage import BaseStorage, SupabaseStorage
+from ragversion.storage import BaseStorage, SQLiteStorage, SupabaseStorage
+from ragversion.watcher import FileWatcher, watch_directory, watch_paths
 from ragversion.exceptions import (
     RAGVersionError,
     ParsingError,
@@ -19,7 +20,7 @@ from ragversion.exceptions import (
     ConfigurationError,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.10.0"
 
 __all__ = [
     # Core tracker
@@ -35,7 +36,12 @@ __all__ = [
     "DocumentStatistics",
     # Storage
     "BaseStorage",
+    "SQLiteStorage",
     "SupabaseStorage",
+    # Watcher
+    "FileWatcher",
+    "watch_directory",
+    "watch_paths",
     # Exceptions
     "RAGVersionError",
     "ParsingError",

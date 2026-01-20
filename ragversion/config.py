@@ -31,6 +31,22 @@ class SupabaseConfig(BaseSettings):
         return self.service_key
 
 
+class SQLiteConfig(BaseSettings):
+    """SQLite storage configuration."""
+
+    db_path: str = Field(default="ragversion.db", description="Path to SQLite database file")
+    content_compression: bool = Field(default=True, description="Compress content with gzip")
+    timeout_seconds: int = Field(default=30, description="Database timeout")
+
+    model_config = SettingsConfigDict(
+        env_prefix="SQLITE_",
+        case_sensitive=False,
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+
 class BatchConfig(BaseSettings):
     """Batch processing configuration."""
 
@@ -81,11 +97,42 @@ class ErrorHandlingConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="RAGVERSION_ERROR_")
 
 
+class NotificationsConfig(BaseSettings):
+    """Notifications configuration."""
+
+    enabled: bool = Field(default=False, description="Enable notifications")
+    notifiers: list[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="List of notification provider configurations"
+    )
+
+    model_config = SettingsConfigDict(env_prefix="RAGVERSION_NOTIFICATIONS_")
+
+
+class ChunkTrackingConfig(BaseSettings):
+    """Chunk-level tracking configuration (v0.10.0).
+
+    Chunk tracking is opt-in and disabled by default to maintain
+    backward compatibility. When enabled, RAGVersion tracks changes
+    at the chunk level, enabling 80-95% embedding cost reduction by
+    only re-embedding changed chunks.
+    """
+
+    enabled: bool = Field(default=False, description="Enable chunk-level tracking (opt-in)")
+    chunk_size: int = Field(default=500, description="Target size per chunk (tokens or characters)")
+    chunk_overlap: int = Field(default=50, description="Overlap between chunks")
+    splitter_type: str = Field(default="recursive", description="Chunking strategy: recursive, character, etc.")
+    store_chunk_content: bool = Field(default=True, description="Store chunk content in database")
+
+    model_config = SettingsConfigDict(env_prefix="RAGVERSION_CHUNK_")
+
+
 class RAGVersionConfig(BaseSettings):
     """Main RAGVersion configuration."""
 
     # Storage backend
-    storage_backend: str = Field(default="supabase", description="Storage backend: supabase")
+    storage_backend: str = Field(default="sqlite", description="Storage backend: sqlite|supabase")
+    sqlite: Optional[SQLiteConfig] = Field(default_factory=SQLiteConfig)
     supabase: Optional[SupabaseConfig] = None
 
     # Tracking
@@ -102,6 +149,12 @@ class RAGVersionConfig(BaseSettings):
 
     # Error handling
     error_handling: ErrorHandlingConfig = Field(default_factory=ErrorHandlingConfig)
+
+    # Notifications
+    notifications: NotificationsConfig = Field(default_factory=NotificationsConfig)
+
+    # Chunk tracking (v0.10.0)
+    chunk_tracking: ChunkTrackingConfig = Field(default_factory=ChunkTrackingConfig)
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -125,12 +178,24 @@ class RAGVersionConfig(BaseSettings):
             data = yaml.safe_load(f)
 
         # Handle nested configs
-        if "storage" in data and "supabase" in data["storage"]:
-            # Merge SUPABASE env vars with YAML
-            supabase_data = data["storage"]["supabase"]
-            supabase_data.setdefault("url", os.getenv("SUPABASE_URL", ""))
-            supabase_data.setdefault("key", os.getenv("SUPABASE_SERVICE_KEY", ""))
-            data["supabase"] = supabase_data
+        if "storage" in data:
+            storage_data = data["storage"]
+
+            # Set storage backend
+            if "backend" in storage_data:
+                data["storage_backend"] = storage_data["backend"]
+
+            # Handle SQLite config
+            if "sqlite" in storage_data:
+                data["sqlite"] = SQLiteConfig(**storage_data["sqlite"])
+
+            # Handle Supabase config
+            if "supabase" in storage_data:
+                # Merge SUPABASE env vars with YAML
+                supabase_data = storage_data["supabase"]
+                supabase_data.setdefault("url", os.getenv("SUPABASE_URL", ""))
+                supabase_data.setdefault("key", os.getenv("SUPABASE_SERVICE_KEY", ""))
+                data["supabase"] = supabase_data
 
         if "tracking" in data:
             data["tracking"] = TrackingConfig(**data["tracking"])
@@ -147,6 +212,12 @@ class RAGVersionConfig(BaseSettings):
         if "error_handling" in data:
             data["error_handling"] = ErrorHandlingConfig(**data["error_handling"])
 
+        if "notifications" in data:
+            data["notifications"] = NotificationsConfig(**data["notifications"])
+
+        if "chunk_tracking" in data:
+            data["chunk_tracking"] = ChunkTrackingConfig(**data["chunk_tracking"])
+
         return cls(**data)
 
     @classmethod
@@ -157,21 +228,32 @@ class RAGVersionConfig(BaseSettings):
         Returns:
             RAGVersionConfig instance
         """
-        # Load SUPABASE config from env
-        try:
-            # Let SupabaseConfig load from environment automatically
-            supabase = SupabaseConfig()
-        except Exception:
-            supabase = None
+        # Check which backend is configured
+        storage_backend = os.getenv("RAGVERSION_STORAGE_BACKEND", "sqlite")
+
+        # Load backend-specific config from env
+        supabase = None
+        sqlite = SQLiteConfig()  # Default SQLite config
+
+        if storage_backend == "supabase":
+            try:
+                # Let SupabaseConfig load from environment automatically
+                supabase = SupabaseConfig()
+            except Exception:
+                # Fall back to SQLite if Supabase not configured
+                storage_backend = "sqlite"
 
         return cls(
-            storage_backend="supabase",
+            storage_backend=storage_backend,
+            sqlite=sqlite,
             supabase=supabase,
             tracking=TrackingConfig(),
             batch=BatchConfig(),
             content=ContentConfig(),
             async_config=AsyncConfig(),
             error_handling=ErrorHandlingConfig(),
+            notifications=NotificationsConfig(),
+            chunk_tracking=ChunkTrackingConfig(),
         )
 
     @classmethod
