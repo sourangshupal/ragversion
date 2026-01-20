@@ -1,15 +1,22 @@
-"""Quick Start Example: LlamaIndex Integration with RAGVersion.
+"""
+Quick Start: LlamaIndex Integration
 
-This example demonstrates how to use the quick_start function to set up
-LlamaIndex integration with just 3 lines of code instead of 20+ lines.
+This example shows the simplest way to integrate RAGVersion with LlamaIndex.
 
-Before: 20+ lines of boilerplate
-After: 3 lines with quick_start()
+BEFORE (20 lines of setup):
+    - Manual storage setup
+    - Manual tracker initialization
+    - Manual node parser, embeddings, index
+    - Manual sync creation
+
+AFTER (3 lines with quick_start):
+    - Just specify directory
+    - Everything auto-configured
+    - Ready to query immediately
 
 Requirements:
-- pip install ragversion[llamaindex]
-- Set OPENAI_API_KEY environment variable
-- Optionally set SUPABASE_URL and SUPABASE_SERVICE_KEY for Supabase storage
+    pip install ragversion[llamaindex]
+    export OPENAI_API_KEY=your-key
 """
 
 import asyncio

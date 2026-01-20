@@ -1,15 +1,22 @@
-"""Quick Start Example: LangChain Integration with RAGVersion.
+"""
+Quick Start: LangChain Integration
 
-This example demonstrates how to use the quick_start function to set up
-LangChain integration with just 3 lines of code instead of 35+ lines.
+This example shows the simplest way to integrate RAGVersion with LangChain.
 
-Before: 35+ lines of boilerplate
-After: 3 lines with quick_start()
+BEFORE (35 lines of setup):
+    - Manual storage setup
+    - Manual tracker initialization
+    - Manual text splitter, embeddings, vectorstore
+    - Manual sync creation
+
+AFTER (3 lines with quick_start):
+    - Just specify directory
+    - Everything auto-configured
+    - Ready to query immediately
 
 Requirements:
-- pip install ragversion[langchain]
-- Set OPENAI_API_KEY environment variable
-- Optionally set SUPABASE_URL and SUPABASE_SERVICE_KEY for Supabase storage
+    pip install ragversion[langchain]
+    export OPENAI_API_KEY=your-key
 """
 
 import asyncio

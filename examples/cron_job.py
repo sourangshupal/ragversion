@@ -15,7 +15,6 @@ import sys
 from datetime import datetime
 
 from ragversion import AsyncVersionTracker
-from ragversion.storage import SupabaseStorage
 
 # Configure logging
 logging.basicConfig(
@@ -30,15 +29,12 @@ async def sync_documents():
     logger.info("Starting document sync...")
 
     try:
-        # Initialize tracker
-        storage = SupabaseStorage.from_env()
-        tracker = AsyncVersionTracker(
-            storage=storage,
+        # Initialize tracker with factory method (best practice)
+        tracker = await AsyncVersionTracker.create(
+            storage="supabase",  # Uses environment variables
             store_content=True,
             max_file_size_mb=50,
         )
-
-        await tracker.initialize()
 
         # Track directory
         result = await tracker.track_directory(

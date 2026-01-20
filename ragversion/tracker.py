@@ -9,7 +9,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Union, TYPE_C
 from uuid import UUID
 
 from ragversion.detector import ChangeDetector
-from ragversion.exceptions import ParsingError, StorageError
+from ragversion.exceptions import ParsingError, StorageError, RAGVersionError
 from ragversion.models import (
     BatchResult,
     ChangeEvent,
@@ -18,6 +18,7 @@ from ragversion.models import (
     DocumentStatistics,
     FileProcessingError,
     StorageStatistics,
+    TrackResult,
     Version,
     ChunkDiff,
     ChunkingConfig,
@@ -98,6 +99,70 @@ class AsyncVersionTracker:
             except ImportError as e:
                 logger.warning(f"Failed to initialize chunk tracking: {e}")
                 self.chunk_tracking_enabled = False
+
+    @classmethod
+    async def create(
+        cls,
+        storage: Union[str, BaseStorage] = "sqlite",
+        db_path: str = "ragversion.db",
+        **kwargs
+    ) -> "AsyncVersionTracker":
+        """Create and initialize tracker with smart defaults.
+
+        This factory method provides a convenient way to create and initialize
+        a tracker with minimal configuration. It supports SQLite (default) and
+        Supabase backends with automatic initialization.
+
+        Args:
+            storage: Storage backend ("sqlite", "supabase", or BaseStorage instance)
+            db_path: Database path for SQLite (default: "ragversion.db")
+            **kwargs: Additional tracker configuration (store_content, max_file_size_mb, etc.)
+
+        Returns:
+            Initialized tracker ready to use
+
+        Raises:
+            ValueError: If storage backend name is invalid
+            ConfigurationError: If environment variables are missing for Supabase
+
+        Examples:
+            >>> # SQLite (zero config)
+            >>> tracker = await AsyncVersionTracker.create()
+            >>>
+            >>> # Supabase (from environment variables)
+            >>> tracker = await AsyncVersionTracker.create("supabase")
+            >>>
+            >>> # With custom configuration
+            >>> tracker = await AsyncVersionTracker.create(
+            ...     storage="sqlite",
+            ...     db_path="my_db.db",
+            ...     max_file_size_mb=100
+            ... )
+        """
+        from ragversion.storage import SQLiteStorage, SupabaseStorage
+
+        # Handle storage parameter
+        if isinstance(storage, str):
+            if storage == "sqlite":
+                storage_instance = SQLiteStorage(db_path=db_path)
+            elif storage == "supabase":
+                storage_instance = SupabaseStorage.from_env()
+            else:
+                raise ValueError(
+                    f"Unknown storage backend: {storage}\n\n"
+                    f"Supported backends: 'sqlite', 'supabase'\n"
+                    f"Or pass a BaseStorage instance directly."
+                )
+        else:
+            storage_instance = storage
+
+        # Create tracker
+        tracker = cls(storage=storage_instance, **kwargs)
+
+        # Initialize immediately
+        await tracker.initialize()
+
+        return tracker
 
     async def initialize(self) -> None:
         """Initialize the tracker and storage backend."""
@@ -186,7 +251,7 @@ class AsyncVersionTracker:
         self,
         file_path: str,
         metadata: Optional[Dict[str, Any]] = None,
-    ) -> Optional[ChangeEvent]:
+    ) -> TrackResult:
         """
         Track a single file for changes.
 
@@ -195,13 +260,61 @@ class AsyncVersionTracker:
             metadata: Optional metadata to attach
 
         Returns:
-            ChangeEvent if change detected, None otherwise
+            TrackResult with change information and tracking status
 
         Raises:
             ParsingError: If file parsing fails
             StorageError: If storage operation fails
+            RAGVersionError: If tracker not initialized
+
+        Examples:
+            >>> result = await tracker.track("document.pdf")
+            >>> if result.changed:
+            ...     print(f"New version: {result.version_number}")
+            ... else:
+            ...     print("No changes detected")
+            >>>
+            >>> # Access properties without null checks
+            >>> if result.change_type:
+            ...     print(f"Change: {result.change_type}")
         """
         self._ensure_initialized()
+
+        # Validate file_path
+        if not file_path:
+            raise ValueError("file_path cannot be empty")
+
+        # Normalize file path
+        normalized_path = str(Path(file_path).absolute())
+        path = Path(file_path)
+
+        # Check file exists
+        if not path.exists():
+            raise FileNotFoundError(
+                f"File not found: {file_path}\n\n"
+                f"Troubleshooting:\n"
+                f"  • Check file path is correct\n"
+                f"  • Use absolute path: {normalized_path}\n"
+                f"  • To track deletion, file must have been tracked before"
+            )
+
+        # Validate file size
+        file_size = path.stat().st_size
+        max_size = self.detector.max_file_size_mb * 1024 * 1024
+
+        if file_size > max_size:
+            raise ValueError(
+                f"File too large: {file_size / 1024 / 1024:.1f}MB > {self.detector.max_file_size_mb}MB\n\n"
+                f"Troubleshooting:\n"
+                f"  • Increase limit: tracker = await AsyncVersionTracker.create(max_file_size_mb={int(file_size / 1024 / 1024) + 10})\n"
+                f"  • Split large files into smaller chunks\n"
+                f"  • Use external storage for large files"
+            )
+
+        # Check if file was tracked before
+        existing_doc = await self.storage.get_document_by_path(normalized_path)
+        was_tracked = existing_doc is not None
+        current_version = existing_doc.current_version if existing_doc else 0
 
         try:
             # Detect change
@@ -211,7 +324,23 @@ class AsyncVersionTracker:
             if event:
                 await self._emit_event(event)
 
-            return event
+                # Return result with change
+                return TrackResult(
+                    changed=True,
+                    event=event,
+                    file_path=normalized_path,
+                    was_tracked=was_tracked,
+                    version_number=event.version_number,
+                )
+            else:
+                # No change detected
+                return TrackResult(
+                    changed=False,
+                    event=None,
+                    file_path=normalized_path,
+                    was_tracked=was_tracked,
+                    version_number=current_version,
+                )
 
         except ParsingError:
             raise
@@ -234,17 +363,74 @@ class AsyncVersionTracker:
         Track all files in a directory (batch processing).
 
         Args:
-            dir_path: Path to directory
-            patterns: File patterns to match (e.g., ['*.pdf', '*.docx'])
-            recursive: Whether to search recursively
-            max_workers: Number of parallel workers
-            on_error: Error handling strategy ('continue' or 'stop')
+            dir_path: Path to directory to track
+            patterns: Glob patterns for files to include (default: all files)
+            recursive: Whether to search subdirectories
+            max_workers: Number of parallel workers (default: 4)
+            on_error: How to handle errors ("continue" or "stop")
             metadata: Optional metadata to attach to all files
 
         Returns:
-            BatchResult with successful changes and failures
+            BatchResult with summary of tracked files
+
+        Pattern Syntax:
+            Uses glob patterns (https://docs.python.org/3/library/glob.html)
+
+            Examples:
+                ["*.pdf"]               # All PDF files
+                ["*.txt", "*.md"]       # Text and Markdown files
+                ["data/*.json"]         # JSON files in data/ folder
+                ["**/*.py"]             # Python files in any subdirectory
+                ["[!_]*.txt"]           # Text files not starting with _
+                ["report_202[0-9].pdf"] # Reports from 2020-2029
+
+            Special characters:
+                *       # Matches any characters
+                ?       # Matches single character
+                [seq]   # Matches any character in seq
+                [!seq]  # Matches any character not in seq
+                **      # Matches directories recursively (requires recursive=True)
+
+            Default:
+                If patterns=None, tracks ALL files in directory
+
+        Examples:
+            >>> # Track all PDFs
+            >>> result = await tracker.track_directory("./docs", patterns=["*.pdf"])
+            >>>
+            >>> # Track markdown and text files recursively
+            >>> result = await tracker.track_directory(
+            ...     "./notes",
+            ...     patterns=["**/*.md", "**/*.txt"],
+            ...     recursive=True
+            ... )
+            >>>
+            >>> # Track everything
+            >>> result = await tracker.track_directory("./data")
         """
         self._ensure_initialized()
+
+        # Validate directory path
+        dir_path_obj = Path(dir_path)
+        if not dir_path_obj.exists():
+            raise FileNotFoundError(
+                f"Directory not found: {dir_path}\n\n"
+                f"Troubleshooting:\n"
+                f"  • Check path is correct: {dir_path_obj.absolute()}\n"
+                f"  • Create directory: mkdir -p {dir_path}"
+            )
+
+        if not dir_path_obj.is_dir():
+            raise ValueError(
+                f"Path is not a directory: {dir_path}\n\n"
+                f"Use tracker.track() for single files"
+            )
+
+        # Validate patterns syntax
+        if patterns:
+            for pattern in patterns:
+                if not pattern:
+                    raise ValueError("Empty pattern in list")
 
         started_at = datetime.utcnow()
         successful: List[ChangeEvent] = []
@@ -260,9 +446,9 @@ class AsyncVersionTracker:
         async def process_file(file_path: str) -> None:
             async with semaphore:
                 try:
-                    event = await self.track(file_path, metadata)
-                    if event:
-                        successful.append(event)
+                    result = await self.track(file_path, metadata)
+                    if result.changed and result.event:
+                        successful.append(result.event)
                 except ParsingError as e:
                     error = FileProcessingError(
                         file_path=file_path,

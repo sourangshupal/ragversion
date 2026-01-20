@@ -113,83 +113,66 @@ pip install ragversion[all]
 
 ## 🚀 Quick Start
 
-### Zero-Config Setup (SQLite - Recommended for Getting Started)
+### 5-Minute Setup
 
+**Install:**
 ```bash
-# 1. Install RAGVersion
-pip install ragversion[all]
-
-# 2. Start tracking immediately - no configuration needed!
-ragversion track ./documents
-
-# That's it! RAGVersion uses SQLite by default (ragversion.db)
+pip install ragversion
 ```
 
-### Basic Usage (Python)
-
+**Track your first file:**
 ```python
 import asyncio
 from ragversion import AsyncVersionTracker
-from ragversion.storage import SQLiteStorage
 
 async def main():
-    # Initialize tracker with SQLite (zero configuration)
-    tracker = AsyncVersionTracker(
-        storage=SQLiteStorage()  # Creates ragversion.db automatically
-    )
-
-    # Track a single file
-    change = await tracker.track("document.pdf")
-    if change:
-        print(f"Document changed: {change.change_type}")
-
-    # Track a directory (batch processing)
-    result = await tracker.track_directory(
-        "./documents",
-        patterns=["*.pdf", "*.docx"],
-        recursive=True
-    )
-
-    print(f"✅ Processed: {len(result.successful)} files")
-    print(f"❌ Failed: {len(result.failed)} files")
+    # Create tracker (zero config!)
+    async with await AsyncVersionTracker.create() as tracker:
+        # Track a file
+        event = await tracker.track("document.pdf")
+        print(f"Tracked! Version: {event.version_number if event else 'unchanged'}")
 
 asyncio.run(main())
 ```
 
+**That's it!** Your document is now tracked with version history.
+
+**Next steps:**
+- [Track a directory](#tracking-directories)
+- [Integrate with LangChain](#framework-integration-langchainllamaindex)
+- [See all examples](examples/)
+
+---
+
+### Tracking Directories
+
+```python
+async with await AsyncVersionTracker.create() as tracker:
+    result = await tracker.track_directory("./documents")
+    print(f"Tracked {result.successful_count} files")
+```
+
+---
+
+### Configuration (Optional)
+
+RAGVersion uses SQLite by default (no setup required).
+
+For production with cloud storage:
+```python
+tracker = await AsyncVersionTracker.create("supabase")  # Requires env vars
+```
+
 <details>
-<summary>☁️ Cloud Setup (Supabase - For Production/Collaboration)</summary>
+<summary>☁️ Supabase Setup (Optional - For Production)</summary>
 
 ```bash
-# 1. Install RAGVersion
-pip install ragversion[all]
-
-# 2. Set environment variables
+# Set environment variables
 export SUPABASE_URL="https://your-project.supabase.co"
 export SUPABASE_SERVICE_KEY="your-service-key"
 
-# 3. Configure backend
-echo "storage:
-  backend: supabase
-  supabase:
-    url: \${SUPABASE_URL}
-    key: \${SUPABASE_SERVICE_KEY}" > ragversion.yaml
-
-# 4. Initialize database
-ragversion migrate
-
-# 5. Start tracking!
-ragversion track ./documents
-```
-
-**Python usage with Supabase:**
-```python
-from ragversion.storage import SupabaseStorage
-
-async def main():
-    tracker = AsyncVersionTracker(
-        storage=SupabaseStorage.from_env()
-    )
-    # ... rest of your code
+# Use in Python
+tracker = await AsyncVersionTracker.create("supabase")
 ```
 
 </details>

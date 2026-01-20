@@ -229,25 +229,42 @@ class FileWatcher:
 
             # Track the file
             logger.debug(f"Tracking: {path}")
-            change = await self.tracker.track(path)
+            result = await self.tracker.track(path)
 
-            if change:
-                logger.info(f"Change detected: {change.change_type.value} - {path}")
+            if result.changed and result.event:
+                logger.info(f"Change detected: {result.change_type.value} - {path}")
 
                 # Call user callback if provided
                 if self.on_change:
                     if asyncio.iscoroutinefunction(self.on_change):
-                        await self.on_change(change)
+                        await self.on_change(result.event)
                     else:
-                        self.on_change(change)
+                        self.on_change(result.event)
             else:
                 logger.debug(f"No changes detected: {path}")
 
         except Exception as e:
             logger.error(f"Failed to track {event.src_path}: {e}")
 
-    async def watch(self) -> None:
-        """Start watching and processing events (blocking)."""
+    async def watch_blocking(
+        self,
+        on_change: Optional[Callable[[ChangeEvent], None]] = None,
+    ) -> None:
+        """Watch for file changes (blocks until stopped).
+
+        This method runs forever until explicitly stopped with stop().
+        Use this in scripts where file watching is the main task.
+
+        Args:
+            on_change: Optional callback function called for each change event
+
+        Examples:
+            >>> watcher = FileWatcher(tracker, ["./docs"])
+            >>> await watcher.watch_blocking()  # Runs until Ctrl+C
+        """
+        if on_change:
+            self.on_change = on_change
+
         # Start the observer
         self.start()
 
@@ -258,13 +275,44 @@ class FileWatcher:
             # Ensure cleanup
             self.stop()
 
-    async def watch_in_background(self) -> asyncio.Task:
-        """Start watching in background and return the task."""
+    async def watch_async(
+        self,
+        on_change: Optional[Callable[[ChangeEvent], None]] = None,
+    ) -> asyncio.Task:
+        """Watch for file changes in background (non-blocking).
+
+        This method returns a Task that runs in the background.
+        Use this when file watching is one of many concurrent tasks.
+
+        Args:
+            on_change: Optional callback function called for each change event
+
+        Returns:
+            asyncio.Task that can be cancelled or awaited
+
+        Examples:
+            >>> watcher = FileWatcher(tracker, ["./docs"])
+            >>> task = await watcher.watch_async()
+            >>> # Do other work...
+            >>> await task  # Wait for watcher when ready
+        """
+        if on_change:
+            self.on_change = on_change
+
         self.start()
         task = asyncio.create_task(self.process_events())
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
         return task
+
+    # Aliases for backward compatibility
+    async def watch(self) -> None:
+        """Alias for watch_blocking() (deprecated, use watch_blocking instead)."""
+        await self.watch_blocking()
+
+    async def watch_in_background(self) -> asyncio.Task:
+        """Alias for watch_async() (deprecated, use watch_async instead)."""
+        return await self.watch_async()
 
     async def __aenter__(self) -> "FileWatcher":
         """Async context manager entry."""

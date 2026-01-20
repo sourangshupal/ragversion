@@ -9,6 +9,7 @@ from ragversion.models import (
     FileProcessingError,
     StorageStatistics,
     DocumentStatistics,
+    TrackResult,
 )
 from ragversion.tracker import AsyncVersionTracker
 from ragversion.storage import BaseStorage, SQLiteStorage, SupabaseStorage
@@ -34,6 +35,7 @@ __all__ = [
     "FileProcessingError",
     "StorageStatistics",
     "DocumentStatistics",
+    "TrackResult",
     # Storage
     "BaseStorage",
     "SQLiteStorage",

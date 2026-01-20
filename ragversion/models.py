@@ -102,6 +102,76 @@ class ChangeEvent(BaseModel):
         }
 
 
+class TrackResult(BaseModel):
+    """Result of tracking a single file.
+
+    This model provides a more informative return type than Optional[ChangeEvent].
+    It includes information about whether the file changed, version number, and
+    previous tracking status.
+
+    Attributes:
+        changed: Whether the file changed (True) or not (False)
+        event: ChangeEvent if file changed, None otherwise
+        file_path: Path to the tracked file
+        was_tracked: Whether file was previously tracked before this operation
+        version_number: Current version number (0 if never tracked)
+
+    Examples:
+        >>> result = await tracker.track("document.pdf")
+        >>> if result.changed:
+        ...     print(f"File changed! New version: {result.version_number}")
+        ... else:
+        ...     print("No changes detected")
+        >>>
+        >>> # Access change type without null check
+        >>> if result.change_type:
+        ...     print(f"Change type: {result.change_type}")
+    """
+
+    changed: bool = Field(..., description="Whether the file changed")
+    event: Optional[ChangeEvent] = Field(None, description="ChangeEvent if file changed")
+    file_path: str = Field(..., description="Path to tracked file")
+    was_tracked: bool = Field(..., description="Whether file was previously tracked")
+    version_number: int = Field(..., description="Current version number (0 if never tracked)")
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat(),
+            UUID: lambda v: str(v),
+        }
+
+    @property
+    def change_type(self) -> Optional[ChangeType]:
+        """Convenience property to access change type without null check.
+
+        Returns:
+            ChangeType if file changed, None otherwise
+        """
+        return self.event.change_type if self.event else None
+
+    @property
+    def document_id(self) -> Optional[UUID]:
+        """Convenience property to access document ID.
+
+        Returns:
+            Document UUID if file changed, None otherwise
+        """
+        return self.event.document_id if self.event else None
+
+    def __bool__(self) -> bool:
+        """Allow if result: ... checks.
+
+        Returns:
+            True if file changed, False otherwise
+
+        Examples:
+            >>> result = await tracker.track("file.pdf")
+            >>> if result:  # Works like Optional[ChangeEvent]
+            ...     print("File changed!")
+        """
+        return self.changed
+
+
 class FileProcessingError(BaseModel):
     """Represents an error that occurred while processing a file."""
 
