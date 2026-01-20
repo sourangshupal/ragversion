@@ -15,7 +15,9 @@ from ragversion.models import (
     ChangeEvent,
     DiffResult,
     Document,
+    DocumentStatistics,
     FileProcessingError,
+    StorageStatistics,
     Version,
 )
 from ragversion.storage.base import BaseStorage
@@ -432,3 +434,24 @@ class AsyncVersionTracker:
     async def health_check(self) -> bool:
         """Check if storage backend is healthy."""
         return await self.storage.health_check()
+
+    # Statistics operations
+
+    async def get_statistics(self) -> StorageStatistics:
+        """Get overall storage statistics."""
+        self._ensure_initialized()
+        return await self.storage.get_statistics()
+
+    async def get_document_statistics(self, document_id: UUID) -> DocumentStatistics:
+        """Get statistics for a specific document."""
+        self._ensure_initialized()
+        return await self.storage.get_document_statistics(document_id)
+
+    async def get_top_documents(
+        self,
+        limit: int = 10,
+        order_by: str = "version_count",
+    ) -> List[Document]:
+        """Get top documents by version count or other criteria."""
+        self._ensure_initialized()
+        return await self.storage.get_top_documents(limit, order_by)

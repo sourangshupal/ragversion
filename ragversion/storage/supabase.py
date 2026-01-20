@@ -9,7 +9,7 @@ from uuid import UUID
 
 from supabase import create_client, Client
 from ragversion.exceptions import StorageError, DocumentNotFoundError, VersionNotFoundError
-from ragversion.models import Document, Version, DiffResult
+from ragversion.models import Document, Version, DiffResult, StorageStatistics, DocumentStatistics
 from ragversion.storage.base import BaseStorage
 
 
@@ -626,3 +626,182 @@ class SupabaseStorage(BaseStorage):
             return count
         except Exception as e:
             raise StorageError(f"Failed to cleanup versions older than {days} days", e)
+
+    # Statistics operations
+
+    async def get_statistics(self) -> StorageStatistics:
+        """Get overall storage statistics."""
+        try:
+            client = self._ensure_client()
+
+            # Count total documents
+            docs_result = client.table("documents").select("id", count="exact").execute()
+            total_documents = docs_result.count or 0
+
+            # Count total versions
+            versions_result = client.table("versions").select("id", count="exact").execute()
+            total_versions = versions_result.count or 0
+
+            # Calculate average versions per document
+            average_versions_per_document = (
+                total_versions / total_documents if total_documents > 0 else 0.0
+            )
+
+            # Get total storage (sum of file sizes from documents)
+            docs_data = client.table("documents").select("file_size").execute()
+            total_storage_bytes = sum(doc["file_size"] for doc in docs_data.data)
+
+            # Get documents by file type
+            docs_with_types = client.table("documents").select("file_type").execute()
+            documents_by_file_type: dict = {}
+            for doc in docs_with_types.data:
+                file_type = doc["file_type"]
+                documents_by_file_type[file_type] = documents_by_file_type.get(file_type, 0) + 1
+
+            # Get recent activity (last 7 days)
+            seven_days_ago = datetime.utcnow() - timedelta(days=7)
+            recent_versions = (
+                client.table("versions")
+                .select("id", count="exact")
+                .gte("created_at", seven_days_ago.isoformat())
+                .execute()
+            )
+            recent_activity_count = recent_versions.count or 0
+
+            # Get oldest and newest document dates
+            oldest_doc = (
+                client.table("documents")
+                .select("created_at")
+                .order("created_at", desc=False)
+                .limit(1)
+                .execute()
+            )
+            oldest_document_date = (
+                datetime.fromisoformat(oldest_doc.data[0]["created_at"])
+                if oldest_doc.data
+                else None
+            )
+
+            newest_doc = (
+                client.table("documents")
+                .select("created_at")
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            newest_document_date = (
+                datetime.fromisoformat(newest_doc.data[0]["created_at"])
+                if newest_doc.data
+                else None
+            )
+
+            return StorageStatistics(
+                total_documents=total_documents,
+                total_versions=total_versions,
+                total_storage_bytes=total_storage_bytes,
+                average_versions_per_document=average_versions_per_document,
+                documents_by_file_type=documents_by_file_type,
+                recent_activity_count=recent_activity_count,
+                oldest_document_date=oldest_document_date,
+                newest_document_date=newest_document_date,
+            )
+        except Exception as e:
+            raise StorageError("Failed to get storage statistics", e)
+
+    async def get_document_statistics(self, document_id: UUID) -> DocumentStatistics:
+        """Get statistics for a specific document."""
+        try:
+            client = self._ensure_client()
+
+            # Get document
+            document = await self.get_document(document_id)
+            if not document:
+                raise DocumentNotFoundError(str(document_id))
+
+            # Get all versions for this document
+            versions = await self.list_versions(document_id, limit=10000)
+            total_versions = len(versions)
+
+            # Count versions by change type
+            versions_by_change_type: dict = {}
+            for version in versions:
+                change_type = version.change_type.value
+                versions_by_change_type[change_type] = (
+                    versions_by_change_type.get(change_type, 0) + 1
+                )
+
+            # Calculate average days between changes
+            average_days_between_changes = 0.0
+            if total_versions > 1:
+                time_diff = document.updated_at - document.created_at
+                days_diff = time_diff.total_seconds() / 86400  # Convert to days
+                average_days_between_changes = days_diff / (total_versions - 1)
+
+            # Determine change frequency
+            if average_days_between_changes < 1:
+                change_frequency = "high"
+            elif average_days_between_changes < 7:
+                change_frequency = "medium"
+            else:
+                change_frequency = "low"
+
+            return DocumentStatistics(
+                document_id=document.id,
+                file_name=document.file_name,
+                file_path=document.file_path,
+                total_versions=total_versions,
+                versions_by_change_type=versions_by_change_type,
+                total_size_bytes=document.file_size,
+                first_tracked=document.created_at,
+                last_updated=document.updated_at,
+                average_days_between_changes=average_days_between_changes,
+                change_frequency=change_frequency,
+            )
+        except DocumentNotFoundError:
+            raise
+        except Exception as e:
+            raise StorageError(f"Failed to get document statistics for {document_id}", e)
+
+    async def get_top_documents(
+        self,
+        limit: int = 10,
+        order_by: str = "version_count",
+    ) -> List[Document]:
+        """Get top documents by version count or other criteria."""
+        try:
+            client = self._ensure_client()
+
+            # Validate order_by parameter
+            valid_order_fields = ["version_count", "updated_at", "file_size"]
+            if order_by not in valid_order_fields:
+                order_by = "version_count"
+
+            # Query top documents
+            result = (
+                client.table("documents")
+                .select("*")
+                .order(order_by, desc=True)
+                .limit(limit)
+                .execute()
+            )
+
+            documents = []
+            for data in result.data:
+                documents.append(
+                    Document(
+                        id=UUID(data["id"]),
+                        file_path=data["file_path"],
+                        file_name=data["file_name"],
+                        file_type=data["file_type"],
+                        file_size=data["file_size"],
+                        content_hash=data["content_hash"],
+                        created_at=datetime.fromisoformat(data["created_at"]),
+                        updated_at=datetime.fromisoformat(data["updated_at"]),
+                        version_count=data["version_count"],
+                        current_version=data["current_version"],
+                        metadata=json.loads(data["metadata"]) if data.get("metadata") else {},
+                    )
+                )
+            return documents
+        except Exception as e:
+            raise StorageError(f"Failed to get top documents by {order_by}", e)

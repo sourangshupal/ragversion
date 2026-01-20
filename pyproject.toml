@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ragversion"
-version = "0.1.0"
+version = "0.2.0"
 description = "Async-first version tracking system for RAG applications"
 readme = "README.md"
 requires-python = ">=3.9"

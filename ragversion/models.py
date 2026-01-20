@@ -170,3 +170,42 @@ class DiffResult(BaseModel):
         json_encoders = {
             UUID: lambda v: str(v),
         }
+
+
+class StorageStatistics(BaseModel):
+    """Overall storage statistics."""
+
+    total_documents: int = Field(..., description="Total number of tracked documents")
+    total_versions: int = Field(..., description="Total number of versions across all documents")
+    total_storage_bytes: int = Field(..., description="Total storage used in bytes")
+    average_versions_per_document: float = Field(..., description="Average number of versions per document")
+    documents_by_file_type: Dict[str, int] = Field(default_factory=dict, description="Count of documents by file type")
+    recent_activity_count: int = Field(default=0, description="Number of changes in last 7 days")
+    oldest_document_date: Optional[datetime] = Field(None, description="Date of oldest tracked document")
+    newest_document_date: Optional[datetime] = Field(None, description="Date of newest tracked document")
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat(),
+        }
+
+
+class DocumentStatistics(BaseModel):
+    """Statistics for a specific document."""
+
+    document_id: UUID = Field(..., description="ID of the document")
+    file_name: str = Field(..., description="Name of the file")
+    file_path: str = Field(..., description="Path to the file")
+    total_versions: int = Field(..., description="Total number of versions")
+    versions_by_change_type: Dict[str, int] = Field(default_factory=dict, description="Count of versions by change type")
+    total_size_bytes: int = Field(..., description="Current file size in bytes")
+    first_tracked: datetime = Field(..., description="When the document was first tracked")
+    last_updated: datetime = Field(..., description="When the document was last updated")
+    average_days_between_changes: float = Field(default=0.0, description="Average days between changes")
+    change_frequency: str = Field(default="low", description="Change frequency: high, medium, low")
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat(),
+            UUID: lambda v: str(v),
+        }

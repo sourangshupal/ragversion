@@ -57,10 +57,13 @@ class ChangeDetector:
         Raises:
             ParsingError: If file parsing fails
         """
+        # Normalize to absolute path for consistency
+        normalized_path = str(Path(file_path).absolute())
+
         # Validate file exists
         if not os.path.exists(file_path):
             # Check if it was previously tracked (deletion)
-            existing_doc = await self.storage.get_document_by_path(file_path)
+            existing_doc = await self.storage.get_document_by_path(normalized_path)
             if existing_doc:
                 return await self._handle_deletion(existing_doc)
             return None
@@ -82,12 +85,12 @@ class ChangeDetector:
         content_hash = self._compute_hash(content)
 
         # Check if document exists
-        existing_doc = await self.storage.get_document_by_path(file_path)
+        existing_doc = await self.storage.get_document_by_path(normalized_path)
 
         if not existing_doc:
             # New document - CREATE
             return await self._handle_creation(
-                file_path, content, content_hash, file_size, metadata
+                normalized_path, content, content_hash, file_size, metadata
             )
         elif existing_doc.content_hash != content_hash:
             # Document changed - MODIFY

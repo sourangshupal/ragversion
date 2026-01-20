@@ -1,6 +1,8 @@
 """Command-line interface for RAGVersion."""
 
 import asyncio
+import functools
+import json
 import sys
 from pathlib import Path
 from typing import Optional
@@ -8,6 +10,7 @@ from typing import Optional
 import click
 from rich import print as rprint
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 
 from ragversion import AsyncVersionTracker, __version__
@@ -20,6 +23,7 @@ console = Console()
 def async_command(f):
     """Decorator to run async Click commands."""
 
+    @functools.wraps(f)
     def wrapper(*args, **kwargs):
         return asyncio.run(f(*args, **kwargs))
 
@@ -408,6 +412,203 @@ async def health(config: Optional[str]):
 
     except Exception as e:
         rprint(f"[red]✗[/red] Health check failed: {e}")
+        sys.exit(1)
+
+
+@main.command()
+@click.argument("document_id", required=False)
+@click.option("--config", "-c", help="Path to config file")
+@click.option(
+    "--format",
+    "-f",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    help="Output format",
+)
+@async_command
+async def stats(document_id: Optional[str], config: Optional[str], format: str):
+    """Display statistics and analytics.
+
+    Examples:
+        ragversion stats                    # Overall statistics
+        ragversion stats <document-id>      # Document-specific stats
+        ragversion stats --format json      # JSON output
+    """
+    try:
+        # Load config
+        cfg = RAGVersionConfig.load(config)
+
+        if not cfg.supabase:
+            rprint("[red]✗[/red] Supabase configuration not found")
+            sys.exit(1)
+
+        # Initialize tracker
+        storage = SupabaseStorage(
+            url=cfg.supabase.url,
+            key=cfg.supabase.key,
+        )
+
+        tracker = AsyncVersionTracker(storage=storage)
+        await tracker.initialize()
+
+        if document_id:
+            # Document-specific statistics
+            from uuid import UUID
+
+            doc_uuid = UUID(document_id)
+            doc_stats = await tracker.get_document_statistics(doc_uuid)
+
+            if format == "json":
+                # JSON output
+                output = {
+                    "document_id": str(doc_stats.document_id),
+                    "file_name": doc_stats.file_name,
+                    "file_path": doc_stats.file_path,
+                    "total_versions": doc_stats.total_versions,
+                    "versions_by_change_type": doc_stats.versions_by_change_type,
+                    "total_size_bytes": doc_stats.total_size_bytes,
+                    "first_tracked": doc_stats.first_tracked.isoformat(),
+                    "last_updated": doc_stats.last_updated.isoformat(),
+                    "average_days_between_changes": doc_stats.average_days_between_changes,
+                    "change_frequency": doc_stats.change_frequency,
+                }
+                print(json.dumps(output, indent=2))
+            else:
+                # Rich table output
+                size_mb = doc_stats.total_size_bytes / (1024 * 1024)
+                size_str = (
+                    f"{size_mb:.2f} MB"
+                    if size_mb >= 1
+                    else f"{doc_stats.total_size_bytes / 1024:.2f} KB"
+                )
+
+                # Overview panel
+                overview_text = f"""[bold]File:[/bold] {doc_stats.file_name}
+[bold]Path:[/bold] {doc_stats.file_path}
+[bold]Versions:[/bold] {doc_stats.total_versions}
+[bold]First tracked:[/bold] {doc_stats.first_tracked.strftime("%Y-%m-%d %H:%M")}
+[bold]Last updated:[/bold] {doc_stats.last_updated.strftime("%Y-%m-%d %H:%M")}
+[bold]Total size:[/bold] {size_str}
+[bold]Change frequency:[/bold] {doc_stats.change_frequency.upper()} (avg {doc_stats.average_days_between_changes:.1f} days)"""
+
+                panel = Panel(overview_text, title="Document Statistics", border_style="cyan")
+                console.print(panel)
+
+                # Version breakdown table
+                if doc_stats.versions_by_change_type:
+                    rprint("\n[bold]Version Breakdown:[/bold]")
+                    table = Table()
+                    table.add_column("Change Type", style="magenta")
+                    table.add_column("Count", justify="right", style="green")
+
+                    for change_type, count in sorted(doc_stats.versions_by_change_type.items()):
+                        table.add_row(change_type.title(), str(count))
+
+                    console.print(table)
+
+        else:
+            # Overall statistics
+            overall_stats = await tracker.get_statistics()
+
+            if format == "json":
+                # JSON output
+                output = {
+                    "total_documents": overall_stats.total_documents,
+                    "total_versions": overall_stats.total_versions,
+                    "total_storage_bytes": overall_stats.total_storage_bytes,
+                    "average_versions_per_document": overall_stats.average_versions_per_document,
+                    "documents_by_file_type": overall_stats.documents_by_file_type,
+                    "recent_activity_count": overall_stats.recent_activity_count,
+                    "oldest_document_date": (
+                        overall_stats.oldest_document_date.isoformat()
+                        if overall_stats.oldest_document_date
+                        else None
+                    ),
+                    "newest_document_date": (
+                        overall_stats.newest_document_date.isoformat()
+                        if overall_stats.newest_document_date
+                        else None
+                    ),
+                }
+                print(json.dumps(output, indent=2))
+            else:
+                # Rich table output
+                storage_mb = overall_stats.total_storage_bytes / (1024 * 1024)
+                storage_str = (
+                    f"{storage_mb:.2f} MB"
+                    if storage_mb >= 1
+                    else f"{overall_stats.total_storage_bytes / 1024:.2f} KB"
+                )
+
+                # Overview panel
+                overview_text = f"""[bold]Total Documents:[/bold] {overall_stats.total_documents:,}
+[bold]Total Versions:[/bold] {overall_stats.total_versions:,}
+[bold]Storage Used:[/bold] {storage_str}
+[bold]Avg Versions/Doc:[/bold] {overall_stats.average_versions_per_document:.2f}
+[bold]Recent Activity:[/bold] {overall_stats.recent_activity_count} changes (last 7 days)"""
+
+                if overall_stats.oldest_document_date:
+                    overview_text += f"\n[bold]Oldest Document:[/bold] {overall_stats.oldest_document_date.strftime('%Y-%m-%d')}"
+                if overall_stats.newest_document_date:
+                    overview_text += f"\n[bold]Newest Document:[/bold] {overall_stats.newest_document_date.strftime('%Y-%m-%d')}"
+
+                panel = Panel(overview_text, title="RAGVersion Statistics", border_style="cyan")
+                console.print(panel)
+
+                # Top documents table
+                rprint("\n[bold]Top Documents by Version Count:[/bold]")
+                top_docs = await tracker.get_top_documents(limit=10, order_by="version_count")
+
+                if top_docs:
+                    table = Table()
+                    table.add_column("File Name", style="cyan")
+                    table.add_column("Type", style="magenta")
+                    table.add_column("Versions", justify="right", style="green")
+                    table.add_column("Size", justify="right")
+
+                    for doc in top_docs:
+                        size_kb = doc.file_size / 1024
+                        size_str = (
+                            f"{size_kb:.1f} KB" if size_kb < 1024 else f"{size_kb/1024:.1f} MB"
+                        )
+
+                        table.add_row(
+                            doc.file_name,
+                            doc.file_type,
+                            str(doc.version_count),
+                            size_str,
+                        )
+
+                    console.print(table)
+                else:
+                    rprint("[dim]No documents found[/dim]")
+
+                # File type distribution table
+                if overall_stats.documents_by_file_type:
+                    rprint("\n[bold]File Type Distribution:[/bold]")
+                    table = Table()
+                    table.add_column("Type", style="magenta")
+                    table.add_column("Count", justify="right", style="green")
+                    table.add_column("Percent", justify="right", style="yellow")
+
+                    total_docs = overall_stats.total_documents
+                    for file_type, count in sorted(
+                        overall_stats.documents_by_file_type.items(),
+                        key=lambda x: x[1],
+                        reverse=True,
+                    ):
+                        percent = (count / total_docs * 100) if total_docs > 0 else 0
+                        table.add_row(file_type, str(count), f"{percent:.1f}%")
+
+                    console.print(table)
+
+        await tracker.close()
+
+    except ValueError as e:
+        rprint(f"[red]✗[/red] Invalid document ID: {e}")
+        sys.exit(1)
+    except Exception as e:
+        rprint(f"[red]✗[/red] Failed to get statistics: {e}")
         sys.exit(1)
 
 

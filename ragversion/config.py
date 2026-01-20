@@ -13,14 +13,22 @@ class SupabaseConfig(BaseSettings):
     """Supabase storage configuration."""
 
     url: str = Field(..., description="Supabase project URL")
-    key: str = Field(..., description="Supabase service key")
+    service_key: str = Field(..., description="Supabase service key")
     connection_pool_size: int = Field(default=10, description="Connection pool size")
     timeout_seconds: int = Field(default=30, description="Request timeout")
 
     model_config = SettingsConfigDict(
         env_prefix="SUPABASE_",
         case_sensitive=False,
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
+
+    @property
+    def key(self) -> str:
+        """Alias for service_key for backwards compatibility."""
+        return self.service_key
 
 
 class BatchConfig(BaseSettings):
@@ -99,6 +107,7 @@ class RAGVersionConfig(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
     @classmethod
@@ -150,10 +159,8 @@ class RAGVersionConfig(BaseSettings):
         """
         # Load SUPABASE config from env
         try:
-            supabase = SupabaseConfig(
-                url=os.getenv("SUPABASE_URL", ""),
-                key=os.getenv("SUPABASE_SERVICE_KEY", ""),
-            )
+            # Let SupabaseConfig load from environment automatically
+            supabase = SupabaseConfig()
         except Exception:
             supabase = None
 

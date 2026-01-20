@@ -48,6 +48,11 @@ ragversion.yaml
 *.db
 *.sqlite
 
+# RAGVersion generated/test data
+vectorstore_index/
+documents/
+examples/*/documents/
+
 # Logs
 *.log
 
@@ -57,3 +62,8 @@ Thumbs.db
 
 # Claude Code
 .claude/
+CLAUDE.md
+examples/fastapi_integration/*
+examples/langchain_rag_minimal.py
+examples/langchain_rag_with_tracking.py
+examples/RAG_INTEGRATION_README.md

@@ -7,6 +7,8 @@ from ragversion.models import (
     Version,
     BatchResult,
     FileProcessingError,
+    StorageStatistics,
+    DocumentStatistics,
 )
 from ragversion.tracker import AsyncVersionTracker
 from ragversion.storage import BaseStorage, SupabaseStorage
@@ -17,7 +19,7 @@ from ragversion.exceptions import (
     ConfigurationError,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     # Core tracker
@@ -29,6 +31,8 @@ __all__ = [
     "Version",
     "BatchResult",
     "FileProcessingError",
+    "StorageStatistics",
+    "DocumentStatistics",
     # Storage
     "BaseStorage",
     "SupabaseStorage",

@@ -4,9 +4,9 @@ import logging
 from typing import Any, List, Optional
 
 try:
-    from langchain.schema import Document as LCDocument
-    from langchain.text_splitter import TextSplitter
-    from langchain.vectorstores.base import VectorStore
+    from langchain_core.documents import Document as LCDocument
+    from langchain_text_splitters import TextSplitter
+    from langchain_core.vectorstores import VectorStore
     from langchain_core.embeddings import Embeddings
 
     LANGCHAIN_AVAILABLE = True

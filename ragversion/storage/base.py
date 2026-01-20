@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import List, Optional
 from uuid import UUID
 
-from ragversion.models import Document, Version, DiffResult
+from ragversion.models import Document, Version, DiffResult, StorageStatistics, DocumentStatistics
 
 
 class BaseStorage(ABC):
@@ -158,4 +158,30 @@ class BaseStorage(ABC):
     @abstractmethod
     async def cleanup_by_age(self, days: int) -> int:
         """Delete versions older than specified days. Returns count deleted."""
+        pass
+
+    # Statistics operations
+
+    @abstractmethod
+    async def get_statistics(self) -> StorageStatistics:
+        """Get overall storage statistics."""
+        pass
+
+    @abstractmethod
+    async def get_document_statistics(self, document_id: UUID) -> DocumentStatistics:
+        """Get statistics for a specific document."""
+        pass
+
+    @abstractmethod
+    async def get_top_documents(
+        self,
+        limit: int = 10,
+        order_by: str = "version_count",
+    ) -> List[Document]:
+        """Get top documents by version count or other criteria.
+
+        Args:
+            limit: Maximum number of documents to return
+            order_by: Field to order by (version_count, updated_at, file_size)
+        """
         pass
