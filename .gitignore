@@ -62,8 +62,10 @@ Thumbs.db
 
 # Claude Code
 .claude/
-CLAUDE.md
-examples/fastapi_integration/*
-examples/langchain_rag_minimal.py
-examples/langchain_rag_with_tracking.py
-examples/RAG_INTEGRATION_README.md
+
+# Example generated files
+examples/*/ragversion.db
+examples/*/vectorstore/
+examples/*/chroma_db/
+examples/*/documents/*.pdf
+examples/*/documents/*.docx

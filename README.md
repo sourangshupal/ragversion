@@ -194,6 +194,93 @@ async def main():
 
 </details>
 
+### ⚡ Framework Integration (LangChain/LlamaIndex)
+
+**NEW in v0.11.0**: One-line setup for LangChain and LlamaIndex!
+
+<table>
+<tr>
+<td width="50%">
+
+**LangChain (3 lines!)**
+```python
+from ragversion.integrations.langchain import quick_start
+
+# That's it! 🚀
+sync = await quick_start("./documents")
+
+# Ready to query
+results = await sync.vectorstore.asimilarity_search("query")
+```
+
+</td>
+<td width="50%">
+
+**LlamaIndex (3 lines!)**
+```python
+from ragversion.integrations.llamaindex import quick_start
+
+# That's it! 🚀
+sync = await quick_start("./documents")
+
+# Ready to query
+query_engine = sync.index.as_query_engine()
+response = query_engine.query("query")
+```
+
+</td>
+</tr>
+</table>
+
+**What `quick_start()` does automatically:**
+- ✅ Creates and initializes RAGVersion tracker
+- ✅ Sets up vector store (FAISS/Chroma for LangChain)
+- ✅ Configures embeddings (OpenAI by default)
+- ✅ Creates text splitter with optimal defaults
+- ✅ Syncs your documents directory
+- ✅ Enables smart chunk-level tracking (80-95% cost savings!)
+
+**Before vs After:**
+```python
+# BEFORE: 35+ lines of boilerplate 😰
+storage = SupabaseStorage.from_env()
+tracker = AsyncVersionTracker(storage=storage)
+await tracker.initialize()
+text_splitter = RecursiveCharacterTextSplitter(...)
+embeddings = OpenAIEmbeddings()
+vectorstore = FAISS.from_texts(...)
+sync = LangChainSync(tracker, text_splitter, embeddings, vectorstore)
+await sync.sync_directory("./documents")
+
+# AFTER: 3 lines 🎉
+from ragversion.integrations.langchain import quick_start
+sync = await quick_start("./documents")
+# Done!
+```
+
+**Customization options:**
+```python
+# LangChain with custom settings
+sync = await quick_start(
+    directory="./documents",
+    vectorstore_type="faiss",        # or "chroma"
+    vectorstore_path="./vectorstore", # persistent storage
+    storage_backend="sqlite",         # or "supabase", "auto"
+    chunk_size=500,                  # custom chunk size
+    enable_chunk_tracking=True,      # smart updates (default)
+)
+
+# LlamaIndex with custom settings
+sync = await quick_start(
+    directory="./documents",
+    storage_backend="supabase",      # cloud storage
+    chunk_size=2048,                 # larger chunks
+    enable_chunk_tracking=False,     # disable for full re-embedding
+)
+```
+
+👉 **[See complete quick start examples](examples/quick_start_langchain.py)**
+
 ---
 
 ## 🎓 Complete Integration Guide
