@@ -16,7 +16,7 @@
 [![GitHub pull requests](https://img.shields.io/github/issues-pr/sourangshupal/ragversion)](https://github.com/sourangshupal/ragversion/pulls)
 [![Last Commit](https://img.shields.io/github/last-commit/sourangshupal/ragversion)](https://github.com/sourangshupal/ragversion/commits/main)
 
-[Documentation](DOCUMENTATION.md) • [Roadmap](future-enhancements.md) • [Contributing](CONTRIBUTING.md) • [PyPI](https://pypi.org/project/ragversion/)
+[📖 How-to Guide](How_to.md) • [Documentation](DOCUMENTATION.md) • [Roadmap](future-enhancements.md) • [Contributing](CONTRIBUTING.md) • [PyPI](https://pypi.org/project/ragversion/)
 
 </div>
 
@@ -193,6 +193,46 @@ async def main():
 ```
 
 </details>
+
+---
+
+## 🎓 Complete Integration Guide
+
+**Want to integrate RAGVersion with LangChain or LlamaIndex?**
+
+👉 **[Read the complete How-to Guide](How_to.md)** - Comprehensive guide with 10+ practical examples:
+
+- ✅ LangChain integration (basic and chunk-level)
+- ✅ LlamaIndex integration (basic and chunk-level)
+- ✅ Real-time file watching
+- ✅ Cost optimization with chunk-level versioning (80-95% savings!)
+- ✅ 4 common use cases (docs, support KB, research, multi-tenant)
+- ✅ Best practices and troubleshooting
+- ✅ Production-ready complete example
+
+**Quick Example - LangChain with Chunk Tracking:**
+```python
+from ragversion import AsyncVersionTracker
+from ragversion.models import ChunkingConfig
+from ragversion.integrations.langchain import LangChainSync
+
+# Enable chunk tracking for 80-95% cost savings!
+chunk_config = ChunkingConfig(enabled=True, chunk_size=500)
+tracker = AsyncVersionTracker(
+    storage=storage,
+    chunk_tracking_enabled=True,
+    chunk_config=chunk_config
+)
+
+# Auto-sync with LangChain - only changed chunks re-embedded!
+sync = LangChainSync(
+    tracker=tracker,
+    embeddings=embeddings,
+    vectorstore=vectorstore,
+    enable_chunk_tracking=True
+)
+await sync.sync_directory("./docs")
+```
 
 ---
 
