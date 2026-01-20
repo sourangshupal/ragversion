@@ -77,6 +77,15 @@ nav:
       - Version History: guide/versions.md
       - Batch Processing: guide/batch-processing.md
       - CLI Usage: guide/cli.md
+  - Features:
+      - Chunk-Level Versioning: CHUNK_VERSIONING.md
+      - File Watching: FILE_WATCHING.md
+      - GitHub Actions: GITHUB_ACTIONS.md
+      - Notifications: NOTIFICATIONS.md
+      - Performance Optimization: PERFORMANCE.md
+      - Query Optimization: QUERY_OPTIMIZATION.md
+      - SQLite Backend: SQLITE_BACKEND.md
+      - API Server: API_GUIDE.md
   - Integrations:
       - LangChain: integrations/langchain.md
       - LlamaIndex: integrations/llamaindex.md

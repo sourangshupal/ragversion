@@ -4,13 +4,19 @@
 
 RAGVersion solves the critical problem of keeping vector databases synchronized with changing source documents in Retrieval-Augmented Generation (RAG) applications.
 
+!!! success "🎉 New in v0.10.0: Chunk-Level Versioning"
+    **80-95% embedding cost reduction** through intelligent chunk-level tracking! Only re-embed the parts of documents that actually changed.
+
+    [:octicons-arrow-right-24: Learn about Chunk Versioning](CHUNK_VERSIONING.md)
+
 ## Why RAGVersion?
 
 When building RAG applications, you face a challenge: **documents change, but vector databases don't update automatically**. RAGVersion provides:
 
 - ✅ **Automatic change detection** - Know exactly which documents changed
+- ✅ **Chunk-level versioning** - Track changes at chunk granularity (80-95% cost savings) 🆕
 - ✅ **Version history** - Complete audit trail of all changes
-- ✅ **Cost optimization** - Only re-index changed documents (99% cost reduction)
+- ✅ **Cost optimization** - Only re-index changed documents and chunks
 - ✅ **Production-ready** - Resilient error handling and async architecture
 - ✅ **Framework integrations** - Works with LangChain, LlamaIndex, and custom pipelines
 
@@ -91,12 +97,20 @@ Documents change → Automatic detection → Only re-index changed docs →
 
 ## Real-World Impact
 
+### Document-Level Tracking
 | Metric | Without RAGVersion | With RAGVersion |
 |--------|-------------------|-----------------|
 | **Cost** | $50 per update | $0.50 per update |
 | **Time** | 33 minutes | 20 seconds |
 | **Files processed** | 1,000 (all) | 10 (only changed) |
 | **Savings** | - | **99% reduction** |
+
+### Chunk-Level Tracking (v0.10.0+) 🆕
+| Scenario | Without Chunks | With Chunks | Savings |
+|----------|----------------|-------------|---------|
+| **Documentation Update** (1 paragraph in 100-page doc) | $2.50 (500 chunks) | $0.01 (2 chunks) | **99.6%** |
+| **Code Repository** (10 modified files out of 50) | $5.00 (1,000 chunks) | $0.15 (30 chunks) | **97%** |
+| **Average Use Case** | Full re-embedding | Smart chunk updates | **80-95%** |
 
 ## Use Cases
 
