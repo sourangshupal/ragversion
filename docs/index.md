@@ -159,6 +159,14 @@ pip install "ragversion[all]"
 
     [:octicons-arrow-right-24: Core Concepts](guide/core-concepts.md)
 
+-   :material-monitor-dashboard:{ .lg .middle } __Web UI__
+
+    ---
+
+    Use the modern web dashboard for visual document management and analytics
+
+    [:octicons-arrow-right-24: Web UI Guide](guide/web-ui.md)
+
 -   :material-connection:{ .lg .middle } __Integrations__
 
     ---

@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}Track Documents - RAGVersion{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-4xl" x-data="trackingApp()">
+
+    <h1 class="text-4xl font-bold text-gray-800 mb-2">Track Documents</h1>
+    <p class="text-gray-600 mb-8">Add files or directories to version tracking</p>
+
+    <!-- Tab Navigation -->
+    <div class="mb-6 border-b border-gray-200">
+        <nav class="-mb-px flex space-x-8">
+            <button @click="activeTab = 'single'"
+                    :class="activeTab === 'single' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                    class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition">
+                Single File
+            </button>
+            <button @click="activeTab = 'directory'"
+                    :class="activeTab === 'directory' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                    class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition">
+                Directory
+            </button>
+        </nav>
+    </div>
+
+    <!-- Single File Tracking Tab -->
+    <div x-show="activeTab === 'single'" class="bg-white rounded-lg shadow-md p-6">
+        <form hx-post="/api/tracking/track"
+              hx-target="#track-result"
+              hx-indicator="#loading-single"
+              hx-swap="innerHTML"
+              @htmx:beforeRequest="trackingInProgress = true"
+              @htmx:afterRequest="trackingInProgress = false">
+
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">File Path</label>
+                <input type="text"
+                       name="file_path"
+                       placeholder="/path/to/document.pdf"
+                       required
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none">
+                <p class="mt-1 text-sm text-gray-500">Absolute or relative path to the file</p>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Metadata (Optional)</label>
+                <textarea name="metadata"
+                          rows="3"
+                          placeholder='{"author": "John Doe", "category": "reports"}'
+                          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none font-mono text-sm"></textarea>
+                <p class="mt-1 text-sm text-gray-500">JSON format key-value pairs</p>
+            </div>
+
+            <button type="submit"
+                    :disabled="trackingInProgress"
+                    class="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition">
+                <span id="loading-single" class="htmx-indicator inline-flex items-center">
+                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Tracking...
+                </span>
+                <span class="htmx-indicator-hidden">Track File</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Directory Tracking Tab -->
+    <div x-show="activeTab === 'directory'" class="bg-white rounded-lg shadow-md p-6" style="display: none;">
+        <form hx-post="/api/tracking/track-directory"
+              hx-target="#track-result"
+              hx-indicator="#loading-directory"
+              hx-swap="innerHTML"
+              @htmx:beforeRequest="trackingInProgress = true"
+              @htmx:afterRequest="trackingInProgress = false">
+
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Directory Path</label>
+                <input type="text"
+                       name="directory_path"
+                       placeholder="/path/to/documents/"
+                       required
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none">
+                <p class="mt-1 text-sm text-gray-500">Absolute or relative path to the directory</p>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">File Patterns (Optional)</label>
+                <input type="text"
+                       name="patterns"
+                       placeholder="*.pdf, *.docx, *.md"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none">
+                <p class="mt-1 text-sm text-gray-500">Comma-separated glob patterns (leave empty for all files)</p>
+            </div>
+
+            <div class="mb-4 flex items-center">
+                <input type="checkbox"
+                       name="recursive"
+                       checked
+                       id="recursive"
+                       class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                <label for="recursive" class="ml-2 block text-sm text-gray-700">Recursive (search subdirectories)</label>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Max Workers</label>
+                <input type="range"
+                       name="max_workers"
+                       min="1"
+                       max="16"
+                       value="4"
+                       x-model="maxWorkers"
+                       class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                <div class="flex justify-between text-sm text-gray-600 mt-1">
+                    <span>1 worker</span>
+                    <span class="font-medium">Concurrency: <span x-text="maxWorkers"></span> workers</span>
+                    <span>16 workers</span>
+                </div>
+            </div>
+
+            <button type="submit"
+                    :disabled="trackingInProgress"
+                    class="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition">
+                <span id="loading-directory" class="htmx-indicator inline-flex items-center">
+                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Tracking...
+                </span>
+                <span class="htmx-indicator-hidden">Track Directory</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Results Display -->
+    <div id="track-result" class="mt-6"></div>
+
+    <!-- Help Section -->
+    <div class="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6">
+        <h3 class="text-lg font-semibold text-blue-900 mb-2">Quick Start</h3>
+        <ul class="space-y-2 text-sm text-blue-800">
+            <li class="flex items-start">
+                <svg class="h-5 w-5 text-blue-600 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                </svg>
+                <span>Single file tracking creates a new version each time the file changes</span>
+            </li>
+            <li class="flex items-start">
+                <svg class="h-5 w-5 text-blue-600 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                </svg>
+                <span>Directory tracking recursively scans for all matching files</span>
+            </li>
+            <li class="flex items-start">
+                <svg class="h-5 w-5 text-blue-600 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                </svg>
+                <span>Supported formats: PDF, DOCX, TXT, MD, PPTX, XLSX, and more</span>
+            </li>
+            <li class="flex items-start">
+                <svg class="h-5 w-5 text-blue-600 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                </svg>
+                <span>Use metadata to tag documents with custom attributes for filtering</span>
+            </li>
+        </ul>
+    </div>
+</div>
+
+<script>
+    function trackingApp() {
+        return {
+            activeTab: 'single',
+            maxWorkers: 4,
+            trackingInProgress: false
+        }
+    }
+
+    // HTMX response handlers
+    document.body.addEventListener('htmx:responseError', function(evt) {
+        const resultDiv = document.getElementById('track-result');
+        resultDiv.innerHTML = `
+            <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div class="flex">
+                    <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                    </svg>
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-red-800">Tracking Failed</h3>
+                        <p class="text-sm text-red-700 mt-1">${evt.detail.error || 'An error occurred while tracking the document.'}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    document.body.addEventListener('htmx:afterRequest', function(evt) {
+        if (evt.detail.successful && evt.detail.xhr.status === 200) {
+            const resultDiv = document.getElementById('track-result');
+            const response = JSON.parse(evt.detail.xhr.responseText);
+
+            // Format success message
+            let successHTML = `
+                <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div class="flex">
+                        <svg class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                        </svg>
+                        <div class="ml-3 flex-1">
+                            <h3 class="text-sm font-medium text-green-800">Tracking Successful</h3>
+            `;
+
+            if (response.document_id) {
+                successHTML += `
+                    <p class="text-sm text-green-700 mt-1">
+                        Document tracked successfully.
+                        <a href="/documents/${response.document_id}" class="font-medium underline">View details →</a>
+                    </p>
+                `;
+            } else if (response.total_tracked) {
+                successHTML += `
+                    <p class="text-sm text-green-700 mt-1">
+                        Successfully tracked ${response.total_tracked} document(s).
+                        <a href="/documents" class="font-medium underline">View all →</a>
+                    </p>
+                `;
+            }
+
+            successHTML += `
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            resultDiv.innerHTML = successHTML;
+        }
+    });
+</script>
+
+<style>
+    .htmx-indicator {
+        display: none;
+    }
+    .htmx-request .htmx-indicator {
+        display: inline-flex;
+    }
+    .htmx-request .htmx-indicator-hidden {
+        display: none;
+    }
+</style>
+{% endblock %}

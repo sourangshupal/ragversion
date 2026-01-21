@@ -3,31 +3,54 @@
 {% block title %}Version Comparison - RAGVersion{% endblock %}
 
 {% block extra_css %}
+<!-- Prism.js for syntax highlighting -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
 <style>
     .diff-container {
         background: #1e293b;
         color: #e2e8f0;
         border-radius: 8px;
-        padding: 1.5rem;
-        overflow-x: auto;
+        overflow: hidden;
         font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
         font-size: 0.875rem;
         line-height: 1.6;
     }
 
     .diff-line {
+        display: flex;
+        padding: 0.25rem 1rem;
         white-space: pre-wrap;
         word-break: break-all;
     }
 
+    .diff-line-number {
+        user-select: none;
+        text-align: right;
+        padding-right: 1rem;
+        color: #64748b;
+        min-width: 3rem;
+    }
+
+    .diff-line-content {
+        flex: 1;
+    }
+
     .diff-addition {
         background: rgba(16, 185, 129, 0.2);
-        color: #6ee7b7;
+        border-left: 3px solid #10b981;
+    }
+
+    .diff-addition .diff-line-number {
+        background: rgba(16, 185, 129, 0.3);
     }
 
     .diff-deletion {
         background: rgba(239, 68, 68, 0.2);
-        color: #fca5a5;
+        border-left: 3px solid #ef4444;
+    }
+
+    .diff-deletion .diff-line-number {
+        background: rgba(239, 68, 68, 0.3);
     }
 
     .diff-context {
@@ -35,96 +58,309 @@
     }
 
     .diff-header {
+        background: #0f172a;
         color: #60a5fa;
         font-weight: bold;
+        padding: 0.5rem 1rem;
+        border-bottom: 1px solid #334155;
+    }
+
+    /* Side-by-side view */
+    .diff-side-by-side {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1px;
+        background: #334155;
+    }
+
+    .diff-side-column {
+        background: #1e293b;
+        overflow-x: auto;
+    }
+
+    .diff-side-line {
+        display: flex;
+        padding: 0.25rem 1rem;
+        min-height: 1.5rem;
+    }
+
+    /* Highlighted word-level changes */
+    .diff-word-added {
+        background: rgba(16, 185, 129, 0.4);
+        border-radius: 2px;
+    }
+
+    .diff-word-removed {
+        background: rgba(239, 68, 68, 0.4);
+        border-radius: 2px;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div style="margin-bottom: 1rem;">
-    <a href="/documents/{{ document_id }}" class="link">← Back to Document</a>
-</div>
+<div class="container mx-auto px-4 py-8">
 
-<h1 style="margin-bottom: 2rem;">Version Comparison</h1>
-
-<!-- Comparison Info -->
-<div class="stats-grid" style="margin-bottom: 2rem;">
-    <div class="stat-card">
-        <div class="stat-label">From Version</div>
-        <div class="stat-value">v{{ from_version }}</div>
+    <!-- Breadcrumb -->
+    <div class="mb-6">
+        <a href="/documents/{{ document_id }}" class="text-blue-600 hover:text-blue-800 inline-flex items-center">
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+            </svg>
+            Back to Document
+        </a>
     </div>
 
-    <div class="stat-card" style="border-left-color: #10b981;">
-        <div class="stat-label">To Version</div>
-        <div class="stat-value">v{{ to_version }}</div>
+    <!-- Page Header -->
+    <div class="mb-8">
+        <h1 class="text-4xl font-bold text-gray-800 mb-2">Version Comparison</h1>
+        <p class="text-gray-600">Comparing version {{ from_version }} with version {{ to_version }}</p>
     </div>
 
-    <div class="stat-card" style="border-left-color: #10b981;">
-        <div class="stat-label">Additions</div>
-        <div class="stat-value" style="color: #10b981;">+{{ diff.additions }}</div>
-    </div>
-
-    <div class="stat-card" style="border-left-color: #ef4444;">
-        <div class="stat-label">Deletions</div>
-        <div class="stat-value" style="color: #ef4444;">-{{ diff.deletions }}</div>
-    </div>
-
-    <div class="stat-card" style="border-left-color: #f59e0b;">
-        <div class="stat-label">Changes</div>
-        <div class="stat-value">{{ diff.changes }}</div>
-    </div>
-
-    <div class="stat-card" style="border-left-color: #8b5cf6;">
-        <div class="stat-label">Similarity</div>
-        <div class="stat-value">{{ "%.1f"|format(diff.similarity * 100) }}%</div>
-    </div>
-</div>
-
-<!-- Diff Content -->
-<div class="card">
-    <div class="card-header">
-        <h2 class="card-title">Detailed Changes</h2>
-    </div>
-
-    {% if diff.diff_text %}
-    <div class="diff-container">
-        {% for line in diff.diff_text.split('\n') %}
-        <div class="diff-line
-            {%- if line.startswith('+++') or line.startswith('---') or line.startswith('@@') %} diff-header
-            {%- elif line.startswith('+') %} diff-addition
-            {%- elif line.startswith('-') %} diff-deletion
-            {%- else %} diff-context{% endif -%}
-        ">{{ line }}</div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div class="empty-state">
-        <h3>No differences found</h3>
-        <p>The versions appear to be identical.</p>
-    </div>
-    {% endif %}
-</div>
-
-<!-- Legend -->
-<div class="card mt-4">
-    <div class="card-header">
-        <h3 class="card-title" style="font-size: 1rem;">Legend</h3>
-    </div>
-    <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <div style="width: 20px; height: 20px; background: rgba(16, 185, 129, 0.3); border-radius: 4px;"></div>
-            <span>Added lines</span>
+    <!-- Statistics Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+        <div class="bg-white rounded-lg shadow-md p-4 border-l-4 border-blue-500">
+            <p class="text-gray-600 text-xs font-medium uppercase">From</p>
+            <p class="text-2xl font-bold text-gray-800 mt-1">v{{ from_version }}</p>
         </div>
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <div style="width: 20px; height: 20px; background: rgba(239, 68, 68, 0.3); border-radius: 4px;"></div>
-            <span>Removed lines</span>
+
+        <div class="bg-white rounded-lg shadow-md p-4 border-l-4 border-green-500">
+            <p class="text-gray-600 text-xs font-medium uppercase">To</p>
+            <p class="text-2xl font-bold text-gray-800 mt-1">v{{ to_version }}</p>
         </div>
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <div style="width: 20px; height: 20px; background: rgba(148, 163, 184, 0.2); border-radius: 4px;"></div>
-            <span>Context lines</span>
+
+        <div class="bg-white rounded-lg shadow-md p-4 border-l-4 border-green-500">
+            <p class="text-gray-600 text-xs font-medium uppercase">Additions</p>
+            <p class="text-2xl font-bold text-green-600 mt-1">+{{ diff.additions }}</p>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-4 border-l-4 border-red-500">
+            <p class="text-gray-600 text-xs font-medium uppercase">Deletions</p>
+            <p class="text-2xl font-bold text-red-600 mt-1">-{{ diff.deletions }}</p>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-4 border-l-4 border-orange-500">
+            <p class="text-gray-600 text-xs font-medium uppercase">Changes</p>
+            <p class="text-2xl font-bold text-gray-800 mt-1">{{ diff.changes }}</p>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-4 border-l-4 border-purple-500">
+            <p class="text-gray-600 text-xs font-medium uppercase">Similarity</p>
+            <p class="text-2xl font-bold text-gray-800 mt-1">{{ "%.1f"|format(diff.similarity * 100) }}%</p>
         </div>
     </div>
+
+    <!-- View Controls -->
+    <div class="bg-white rounded-lg shadow-md p-4 mb-6">
+        <div class="flex items-center justify-between flex-wrap gap-4">
+            <div class="flex items-center gap-4" x-data="{ viewMode: 'unified' }">
+                <label class="text-sm font-medium text-gray-700">View Mode:</label>
+                <div class="inline-flex rounded-lg border border-gray-300 bg-white p-1">
+                    <button @click="viewMode = 'unified'; toggleView('unified')"
+                            :class="viewMode === 'unified' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'"
+                            class="px-4 py-2 rounded-md text-sm font-medium transition">
+                        Unified
+                    </button>
+                    <button @click="viewMode = 'split'; toggleView('split')"
+                            :class="viewMode === 'split' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'"
+                            class="px-4 py-2 rounded-md text-sm font-medium transition">
+                        Side-by-Side
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <label class="flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" id="lineNumbersToggle" checked
+                           class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                           onchange="toggleLineNumbers(this.checked)">
+                    Line Numbers
+                </label>
+                <label class="flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" id="syntaxHighlightToggle"
+                           class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                           onchange="toggleSyntaxHighlight(this.checked)">
+                    Syntax Highlighting
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Diff Content -->
+    <div class="bg-white rounded-lg shadow-md overflow-hidden mb-6">
+        <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-800">Detailed Changes</h2>
+        </div>
+
+        {% if diff.diff_text %}
+        <!-- Unified View -->
+        <div id="unified-view" class="diff-container">
+            {% set ns = namespace(line_num=1) %}
+            {% for line in diff.diff_text.split('\n') %}
+            {% if line.startswith('+++') or line.startswith('---') or line.startswith('@@') %}
+            <div class="diff-header">{{ line }}</div>
+            {% elif line.startswith('+') %}
+            <div class="diff-line diff-addition">
+                <span class="diff-line-number">{{ ns.line_num }}</span>
+                <span class="diff-line-content">{{ line }}</span>
+            </div>
+            {% set ns.line_num = ns.line_num + 1 %}
+            {% elif line.startswith('-') %}
+            <div class="diff-line diff-deletion">
+                <span class="diff-line-number">{{ ns.line_num }}</span>
+                <span class="diff-line-content">{{ line }}</span>
+            </div>
+            {% set ns.line_num = ns.line_num + 1 %}
+            {% else %}
+            <div class="diff-line diff-context">
+                <span class="diff-line-number">{{ ns.line_num }}</span>
+                <span class="diff-line-content">{{ line }}</span>
+            </div>
+            {% set ns.line_num = ns.line_num + 1 %}
+            {% endif %}
+            {% endfor %}
+        </div>
+
+        <!-- Side-by-Side View (hidden by default) -->
+        <div id="split-view" class="diff-side-by-side" style="display: none;">
+            <div class="diff-side-column">
+                <div class="diff-header">Version {{ from_version }} (Before)</div>
+                <div id="split-view-left"></div>
+            </div>
+            <div class="diff-side-column">
+                <div class="diff-header">Version {{ to_version }} (After)</div>
+                <div id="split-view-right"></div>
+            </div>
+        </div>
+
+        {% else %}
+        <div class="text-center py-12">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-gray-900">No differences found</h3>
+            <p class="mt-1 text-sm text-gray-500">The versions appear to be identical.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Legend -->
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">Legend</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-6 h-6 bg-green-100 border-l-4 border-green-500 rounded"></div>
+                <span class="text-sm text-gray-700">Added lines</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="w-6 h-6 bg-red-100 border-l-4 border-red-500 rounded"></div>
+                <span class="text-sm text-gray-700">Removed lines</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="w-6 h-6 bg-gray-100 rounded"></div>
+                <span class="text-sm text-gray-700">Context lines</span>
+            </div>
+        </div>
+    </div>
+
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
+
+<script>
+    function toggleView(mode) {
+        const unifiedView = document.getElementById('unified-view');
+        const splitView = document.getElementById('split-view');
+
+        if (mode === 'unified') {
+            unifiedView.style.display = 'block';
+            splitView.style.display = 'none';
+        } else {
+            unifiedView.style.display = 'none';
+            splitView.style.display = 'grid';
+            if (!splitView.dataset.initialized) {
+                initializeSplitView();
+                splitView.dataset.initialized = 'true';
+            }
+        }
+    }
+
+    function initializeSplitView() {
+        const diffText = `{{ diff.diff_text | safe }}`;
+        const lines = diffText.split('\n');
+
+        const leftContainer = document.getElementById('split-view-left');
+        const rightContainer = document.getElementById('split-view-right');
+
+        let leftHTML = '';
+        let rightHTML = '';
+        let lineNum = 1;
+
+        lines.forEach(line => {
+            if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('@@')) {
+                // Skip header lines in split view
+                return;
+            }
+
+            if (line.startsWith('-')) {
+                // Line removed from left side only
+                leftHTML += `
+                    <div class="diff-side-line diff-deletion">
+                        <span class="diff-line-number">${lineNum}</span>
+                        <span class="diff-line-content">${line}</span>
+                    </div>
+                `;
+                rightHTML += `<div class="diff-side-line" style="background: #0f172a;">&nbsp;</div>`;
+            } else if (line.startsWith('+')) {
+                // Line added to right side only
+                leftHTML += `<div class="diff-side-line" style="background: #0f172a;">&nbsp;</div>`;
+                rightHTML += `
+                    <div class="diff-side-line diff-addition">
+                        <span class="diff-line-number">${lineNum}</span>
+                        <span class="diff-line-content">${line}</span>
+                    </div>
+                `;
+            } else {
+                // Context line - show on both sides
+                leftHTML += `
+                    <div class="diff-side-line diff-context">
+                        <span class="diff-line-number">${lineNum}</span>
+                        <span class="diff-line-content">${line}</span>
+                    </div>
+                `;
+                rightHTML += `
+                    <div class="diff-side-line diff-context">
+                        <span class="diff-line-number">${lineNum}</span>
+                        <span class="diff-line-content">${line}</span>
+                    </div>
+                `;
+            }
+            lineNum++;
+        });
+
+        leftContainer.innerHTML = leftHTML;
+        rightContainer.innerHTML = rightHTML;
+    }
+
+    function toggleLineNumbers(show) {
+        const lineNumbers = document.querySelectorAll('.diff-line-number');
+        lineNumbers.forEach(num => {
+            num.style.display = show ? 'block' : 'none';
+        });
+    }
+
+    function toggleSyntaxHighlight(enabled) {
+        if (enabled) {
+            // Apply Prism syntax highlighting
+            document.querySelectorAll('.diff-line-content').forEach(element => {
+                Prism.highlightElement(element);
+            });
+        } else {
+            // Remove syntax highlighting (reload page for now)
+            location.reload();
+        }
+    }
+</script>
 {% endblock %}

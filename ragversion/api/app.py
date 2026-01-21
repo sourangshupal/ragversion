@@ -2,8 +2,10 @@
 
 from contextlib import asynccontextmanager
 from datetime import datetime
+import json
+from typing import Set
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -13,6 +15,7 @@ from ragversion.api.dependencies import set_tracker
 from ragversion.api.models import HealthCheckResponse, ErrorResponse
 from ragversion.api.routes import documents, versions, tracking, statistics
 from ragversion.web import routes as web_routes
+from ragversion.models import ChangeEvent
 
 
 @asynccontextmanager
@@ -108,6 +111,73 @@ def create_app(
             storage_healthy=storage_healthy,
             timestamp=datetime.utcnow(),
         )
+
+    # WebSocket connection manager for live activity feed
+    class ConnectionManager:
+        """Manages WebSocket connections for real-time updates."""
+
+        def __init__(self):
+            self.active_connections: Set[WebSocket] = set()
+
+        async def connect(self, websocket: WebSocket):
+            await websocket.accept()
+            self.active_connections.add(websocket)
+
+        def disconnect(self, websocket: WebSocket):
+            self.active_connections.discard(websocket)
+
+        async def broadcast(self, message: dict):
+            """Broadcast message to all connected clients."""
+            disconnected = set()
+            for connection in self.active_connections:
+                try:
+                    await connection.send_json(message)
+                except Exception:
+                    disconnected.add(connection)
+
+            # Clean up disconnected clients
+            for connection in disconnected:
+                self.active_connections.discard(connection)
+
+    # Create connection manager
+    connection_manager = ConnectionManager()
+
+    # WebSocket endpoint for live activity feed
+    @app.websocket("/ws/changes")
+    async def websocket_changes(websocket: WebSocket):
+        """WebSocket endpoint for real-time change notifications."""
+        await connection_manager.connect(websocket)
+
+        # Callback to broadcast changes via WebSocket
+        async def broadcast_change(event: ChangeEvent):
+            """Broadcast change event to all connected clients."""
+            try:
+                await connection_manager.broadcast({
+                    "document_id": str(event.document_id),
+                    "file_name": event.file_name,
+                    "file_path": event.file_path,
+                    "change_type": event.change_type.value,
+                    "version_number": event.version_number,
+                    "timestamp": event.timestamp.isoformat(),
+                })
+            except Exception as e:
+                print(f"Error broadcasting change: {e}")
+
+        # Register callback with tracker
+        tracker.on_change(broadcast_change)
+
+        try:
+            # Keep connection alive and listen for messages
+            while True:
+                try:
+                    # Receive and ignore any messages (we only broadcast)
+                    await websocket.receive_text()
+                except WebSocketDisconnect:
+                    break
+        except Exception as e:
+            print(f"WebSocket error: {e}")
+        finally:
+            connection_manager.disconnect(websocket)
 
     # Register API routers (with /api prefix)
     app.include_router(documents.router, prefix="/api")

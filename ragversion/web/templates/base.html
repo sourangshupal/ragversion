@@ -4,6 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}RAGVersion{% endblock %}</title>
+
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- HTMX for dynamic updates -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+    <!-- Alpine.js for interactivity -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <!-- Chart.js for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
     <style>
         * {
             margin: 0;
@@ -302,6 +315,9 @@
                     <ul>
                         <li><a href="/" {% if active_page == 'dashboard' %}class="active"{% endif %}>Dashboard</a></li>
                         <li><a href="/documents" {% if active_page == 'documents' %}class="active"{% endif %}>Documents</a></li>
+                        <li><a href="/track" {% if active_page == 'track' %}class="active"{% endif %}>Track</a></li>
+                        <li><a href="/analytics" {% if active_page == 'analytics' %}class="active"{% endif %}>Analytics</a></li>
+                        <li><a href="/integrations" {% if active_page == 'integrations' %}class="active"{% endif %}>Integrations</a></li>
                         <li><a href="/api/docs" target="_blank">API Docs</a></li>
                     </ul>
                 </nav>

@@ -77,6 +77,7 @@ nav:
       - Version History: guide/versions.md
       - Batch Processing: guide/batch-processing.md
       - CLI Usage: guide/cli.md
+      - Web UI: guide/web-ui.md
   - Features:
       - Chunk-Level Versioning: CHUNK_VERSIONING.md
       - File Watching: FILE_WATCHING.md

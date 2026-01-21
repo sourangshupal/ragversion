@@ -47,6 +47,8 @@ htmlcov/
 ragversion.yaml
 *.db
 *.sqlite
+*.db-shm
+*.db-wal
 
 # RAGVersion generated/test data
 vectorstore_index/
