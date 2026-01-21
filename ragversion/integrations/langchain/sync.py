@@ -55,6 +55,37 @@ class LangChainSync:
                 "LangChain is not installed. Install with: pip install ragversion[langchain]"
             )
 
+        # Validate vector store compatibility
+        if not hasattr(vectorstore, 'aadd_documents'):
+            raise TypeError(
+                f"Vector store '{type(vectorstore).__name__}' does not support aadd_documents().\n\n"
+                "RAGVersion requires LangChain-compatible vector stores with:\n"
+                "  - aadd_documents(documents: List[Document]) -> List[str]\n"
+                "  - delete(filter: Dict[str, Any]) -> None\n\n"
+                "Supported stores: FAISS, Chroma, Pinecone, Qdrant, Weaviate, etc.\n"
+                "See: https://docs.ragversion.com/integrations/vectorstores"
+            )
+
+        if not hasattr(vectorstore, 'delete'):
+            import warnings
+            warnings.warn(
+                f"Vector store '{type(vectorstore).__name__}' may not support deletion by metadata filter. "
+                "Document updates may not work correctly. "
+                "Consider using FAISS, Chroma, Qdrant, or Pinecone instead.",
+                UserWarning
+            )
+
+        # Validate embeddings compatibility
+        if not hasattr(embeddings, 'embed_documents'):
+            raise TypeError(
+                f"Embeddings '{type(embeddings).__name__}' does not support embed_documents().\n\n"
+                "RAGVersion requires LangChain-compatible embeddings with:\n"
+                "  - embed_documents(texts: List[str]) -> List[List[float]]\n"
+                "  - embed_query(text: str) -> List[float]\n\n"
+                "Supported embeddings: OpenAI, HuggingFace, Cohere, Ollama, etc.\n"
+                "See: https://docs.ragversion.com/integrations/embeddings"
+            )
+
         self.tracker = tracker
         self.text_splitter = text_splitter
         self.embeddings = embeddings
@@ -90,39 +121,53 @@ class LangChainSync:
 
     async def _handle_creation(self, event: ChangeEvent) -> None:
         """Handle document creation."""
-        # Get content
-        content = await self.tracker.get_content(event.version_id)
-        if not content:
-            logger.warning(f"No content for version {event.version_id}")
-            return
+        try:
+            # Get content
+            content = await self.tracker.get_content(event.version_id)
+            if not content:
+                logger.warning(f"No content for version {event.version_id}")
+                return
 
-        # Split text
-        texts = self.text_splitter.split_text(content)
+            # Split text
+            texts = self.text_splitter.split_text(content)
 
-        # Create metadata
-        metadata = {
-            "document_id": str(event.document_id),
-            "version_id": str(event.version_id),
-            "version_number": event.version_number,
-            "file_path": event.file_path,
-            "file_name": event.file_name,
-            "content_hash": event.content_hash,
-        }
+            # Create metadata
+            metadata = {
+                "document_id": str(event.document_id),
+                "version_id": str(event.version_id),
+                "version_number": event.version_number,
+                "file_path": event.file_path,
+                "file_name": event.file_name,
+                "content_hash": event.content_hash,
+            }
 
-        # Add custom metadata
-        if self.metadata_extractor:
-            custom_metadata = self.metadata_extractor(event.file_path)
-            metadata.update(custom_metadata)
+            # Add custom metadata
+            if self.metadata_extractor:
+                custom_metadata = self.metadata_extractor(event.file_path)
+                metadata.update(custom_metadata)
 
-        # Create LangChain documents
-        documents = [
-            LCDocument(page_content=text, metadata=metadata) for text in texts
-        ]
+            # Create LangChain documents
+            documents = [
+                LCDocument(page_content=text, metadata=metadata) for text in texts
+            ]
 
-        # Add to vector store
-        await self.vectorstore.aadd_documents(documents)
+            # Add to vector store
+            await self.vectorstore.aadd_documents(documents)
 
-        logger.info(f"Added {len(documents)} chunks to vector store for {event.file_name}")
+            logger.info(f"Added {len(documents)} chunks to vector store for {event.file_name}")
+        except Exception as e:
+            # Provide context-specific error
+            raise RuntimeError(
+                f"Failed to add document '{event.file_name}' to vector store.\n"
+                f"Document ID: {event.document_id}\n"
+                f"Vector store: {type(self.vectorstore).__name__}\n"
+                f"Error: {str(e)}\n\n"
+                "This may indicate:\n"
+                "  - Vector store connection issues\n"
+                "  - Embeddings API rate limit or quota exceeded\n"
+                "  - Invalid document content or metadata\n\n"
+                "See: https://docs.ragversion.com/troubleshooting"
+            ) from e
 
     async def _handle_modification(self, event: ChangeEvent) -> None:
         """Handle document modification with optional chunk-level updates."""

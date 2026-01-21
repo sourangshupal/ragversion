@@ -51,6 +51,25 @@ class LlamaIndexSync:
                 "LlamaIndex is not installed. Install with: pip install ragversion[llamaindex]"
             )
 
+        # Validate index compatibility
+        if not hasattr(index, 'insert'):
+            raise TypeError(
+                f"Index '{type(index).__name__}' does not support insert().\n\n"
+                "RAGVersion requires LlamaIndex-compatible indexes with:\n"
+                "  - insert(document: Document) -> str\n"
+                "  - delete_ref_doc(ref_doc_id: str, delete_from_docstore: bool) -> None\n\n"
+                "Supported index: VectorStoreIndex\n"
+                "See: https://docs.ragversion.com/integrations/llamaindex"
+            )
+
+        if not hasattr(index, 'delete_ref_doc'):
+            import warnings
+            warnings.warn(
+                f"Index '{type(index).__name__}' may not support deletion. "
+                "Document updates may not work correctly.",
+                UserWarning
+            )
+
         self.tracker = tracker
         self.index = index
         self.node_parser = node_parser
@@ -88,38 +107,52 @@ class LlamaIndexSync:
 
     async def _handle_creation(self, event: ChangeEvent) -> None:
         """Handle document creation."""
-        # Get content
-        content = await self.tracker.get_content(event.version_id)
-        if not content:
-            logger.warning(f"No content for version {event.version_id}")
-            return
+        try:
+            # Get content
+            content = await self.tracker.get_content(event.version_id)
+            if not content:
+                logger.warning(f"No content for version {event.version_id}")
+                return
 
-        # Create metadata
-        metadata = {
-            "document_id": str(event.document_id),
-            "version_id": str(event.version_id),
-            "version_number": event.version_number,
-            "file_path": event.file_path,
-            "file_name": event.file_name,
-            "content_hash": event.content_hash,
-        }
+            # Create metadata
+            metadata = {
+                "document_id": str(event.document_id),
+                "version_id": str(event.version_id),
+                "version_number": event.version_number,
+                "file_path": event.file_path,
+                "file_name": event.file_name,
+                "content_hash": event.content_hash,
+            }
 
-        # Add custom metadata
-        if self.metadata_extractor:
-            custom_metadata = self.metadata_extractor(event.file_path)
-            metadata.update(custom_metadata)
+            # Add custom metadata
+            if self.metadata_extractor:
+                custom_metadata = self.metadata_extractor(event.file_path)
+                metadata.update(custom_metadata)
 
-        # Create LlamaIndex document
-        document = LIDocument(
-            text=content,
-            metadata=metadata,
-            doc_id=str(event.document_id),
-        )
+            # Create LlamaIndex document
+            document = LIDocument(
+                text=content,
+                metadata=metadata,
+                doc_id=str(event.document_id),
+            )
 
-        # Insert into index
-        self.index.insert(document)
+            # Insert into index
+            self.index.insert(document)
 
-        logger.info(f"Added {event.file_name} to LlamaIndex")
+            logger.info(f"Added {event.file_name} to LlamaIndex")
+        except Exception as e:
+            # Provide context-specific error
+            raise RuntimeError(
+                f"Failed to add document '{event.file_name}' to LlamaIndex.\n"
+                f"Document ID: {event.document_id}\n"
+                f"Index type: {type(self.index).__name__}\n"
+                f"Error: {str(e)}\n\n"
+                "This may indicate:\n"
+                "  - Index connection issues\n"
+                "  - Embeddings API rate limit or quota exceeded\n"
+                "  - Invalid document content or metadata\n\n"
+                "See: https://docs.ragversion.com/troubleshooting"
+            ) from e
 
     async def _handle_modification(self, event: ChangeEvent) -> None:
         """Handle document modification with optional chunk-level updates."""

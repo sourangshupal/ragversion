@@ -700,6 +700,79 @@ await sync.sync_directory("./documents")
 </tr>
 </table>
 
+### 🔌 Supported Embeddings & Vector Stores
+
+RAGVersion works with **ANY** LangChain/LlamaIndex compatible embeddings and vector stores:
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+#### 🤖 Embeddings
+
+**Paid/Cloud:**
+- ✅ **OpenAI** - `pip install langchain-openai`
+- ✅ **Cohere** - `pip install langchain-cohere`
+- ✅ **Google VertexAI** - `pip install langchain-google-vertexai`
+- ✅ **AWS Bedrock** - `pip install langchain-aws`
+- ✅ **Anthropic Voyage** - `pip install langchain-voyage`
+
+**Free/Local:**
+- ✅ **HuggingFace** - `pip install sentence-transformers`
+- ✅ **Ollama** - `pip install ollama`
+- ✅ **70+ more options** via LangChain/LlamaIndex
+
+**Auto-detection:**
+```python
+from ragversion.integrations.langchain import quick_start
+
+# Automatically uses available provider:
+# OpenAI → HuggingFace → Ollama
+sync = await quick_start(
+    directory="./documents",
+    embedding_provider="auto"
+)
+```
+
+</td>
+<td width="50%" valign="top">
+
+#### 🗄️ Vector Stores
+
+**Cloud/Managed:**
+- ✅ **Pinecone** - `pip install langchain-pinecone`
+- ✅ **Qdrant Cloud** - `pip install langchain-qdrant`
+- ✅ **Weaviate** - `pip install langchain-weaviate`
+- ✅ **Supabase Vector** - Built-in with Supabase
+- ✅ **MongoDB Atlas** - `pip install langchain-mongodb`
+
+**Self-Hosted:**
+- ✅ **FAISS** - `pip install faiss-cpu`
+- ✅ **Chroma** - `pip install chromadb`
+- ✅ **Qdrant** - `pip install qdrant-client`
+- ✅ **Milvus** - `pip install pymilvus`
+- ✅ **50+ more options** via LangChain/LlamaIndex
+
+**Example:**
+```python
+from langchain_openai import OpenAIEmbeddings
+from langchain_pinecone import PineconeVectorStore
+
+embeddings = OpenAIEmbeddings()
+vectorstore = PineconeVectorStore(...)
+# Works out of the box!
+```
+
+</td>
+</tr>
+</table>
+
+**📚 Need examples?** Check our [cookbook](docs/cookbook/):
+- [OpenAI + Pinecone](docs/cookbook/openai_pinecone.md) - Production setup
+- [HuggingFace + Chroma](docs/cookbook/huggingface_chroma.md) - **100% Free** local setup
+- [Ollama + Qdrant](docs/cookbook/ollama_qdrant.md) - Self-hosted with latest models
+- [Cost Optimization](docs/cookbook/cost_optimization.md) - **Save 80-95%** on embedding costs
+
 ### 🎯 Custom Integrations
 
 RAGVersion's modular design makes it easy to integrate with any RAG framework:

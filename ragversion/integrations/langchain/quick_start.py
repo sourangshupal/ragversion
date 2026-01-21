@@ -5,6 +5,7 @@ dramatically reducing boilerplate code from ~35 lines to just 3 lines.
 """
 
 import logging
+import os
 from pathlib import Path
 from typing import Any, List, Literal, Optional
 
@@ -31,10 +32,116 @@ from ragversion.integrations.langchain.sync import LangChainSync
 logger = logging.getLogger(__name__)
 
 
+def _is_package_installed(package_name: str) -> bool:
+    """Check if a package is installed without importing it."""
+    try:
+        __import__(package_name)
+        return True
+    except ImportError:
+        return False
+
+
+def _create_embeddings(provider: Literal["auto", "openai", "huggingface", "ollama"]) -> Embeddings:
+    """Auto-detect or create embeddings based on provider.
+
+    Args:
+        provider: Embedding provider to use ("auto", "openai", "huggingface", or "ollama")
+
+    Returns:
+        Initialized embeddings instance
+
+    Raises:
+        ValueError: If provider is unknown or no provider is available
+        ImportError: If required package for provider is not installed
+    """
+    if provider == "auto":
+        # Try OpenAI first (if API key is set)
+        if os.getenv("OPENAI_API_KEY"):
+            try:
+                from langchain_openai import OpenAIEmbeddings
+                logger.info("Auto-detected OpenAI embeddings (OPENAI_API_KEY found)")
+                return OpenAIEmbeddings(model="text-embedding-3-small")
+            except ImportError:
+                logger.debug("OpenAI API key found but langchain-openai not installed")
+
+        # Try HuggingFace (if sentence-transformers is installed)
+        if _is_package_installed("sentence_transformers"):
+            try:
+                from langchain_community.embeddings import HuggingFaceEmbeddings
+                logger.info("Auto-detected HuggingFace embeddings (sentence-transformers installed)")
+                return HuggingFaceEmbeddings(
+                    model_name="sentence-transformers/all-MiniLM-L6-v2"
+                )
+            except ImportError:
+                logger.debug("sentence-transformers found but langchain-community not installed")
+
+        # Try Ollama (if ollama package is installed)
+        if _is_package_installed("ollama"):
+            try:
+                from langchain_community.embeddings import OllamaEmbeddings
+                logger.info("Auto-detected Ollama embeddings (ollama installed)")
+                return OllamaEmbeddings(model="llama2")
+            except ImportError:
+                logger.debug("ollama found but langchain-community not installed")
+
+        # Nothing available
+        raise ValueError(
+            "No embeddings provider available. Please choose one:\n\n"
+            "Option 1 - OpenAI (paid, best quality):\n"
+            "  export OPENAI_API_KEY='sk-...'\n"
+            "  pip install langchain-openai\n\n"
+            "Option 2 - HuggingFace (free, local):\n"
+            "  pip install sentence-transformers\n\n"
+            "Option 3 - Ollama (free, local):\n"
+            "  pip install ollama\n\n"
+            "Or provide your own: embeddings=YourEmbeddings()\n"
+            "See: https://docs.ragversion.com/embeddings"
+        )
+
+    elif provider == "openai":
+        try:
+            from langchain_openai import OpenAIEmbeddings
+            return OpenAIEmbeddings(model="text-embedding-3-small")
+        except ImportError:
+            raise ImportError(
+                "OpenAI embeddings require langchain-openai. Install with:\n"
+                "  pip install langchain-openai"
+            )
+
+    elif provider == "huggingface":
+        try:
+            from langchain_community.embeddings import HuggingFaceEmbeddings
+            return HuggingFaceEmbeddings(
+                model_name="sentence-transformers/all-MiniLM-L6-v2"
+            )
+        except ImportError:
+            raise ImportError(
+                "HuggingFace embeddings require sentence-transformers. Install with:\n"
+                "  pip install sentence-transformers"
+            )
+
+    elif provider == "ollama":
+        try:
+            from langchain_community.embeddings import OllamaEmbeddings
+            return OllamaEmbeddings(model="llama2")
+        except ImportError:
+            raise ImportError(
+                "Ollama embeddings require ollama package. Install with:\n"
+                "  pip install ollama"
+            )
+
+    else:
+        raise ValueError(
+            f"Unknown embedding provider: {provider}. "
+            f"Valid options: 'auto', 'openai', 'huggingface', 'ollama'"
+        )
+
+
 async def quick_start(
     directory: str,
     vectorstore_type: Literal["faiss", "chroma"] = "faiss",
     vectorstore_path: Optional[str] = None,
+    embedding_provider: Literal["auto", "openai", "huggingface", "ollama"] = "auto",
     embeddings: Optional[Embeddings] = None,
     storage_backend: Literal["sqlite", "supabase", "auto"] = "auto",
     chunk_size: int = 1000,
@@ -77,7 +184,12 @@ async def quick_start(
         vectorstore_path: Path for persistent storage (optional)
             - For FAISS: Load existing index or save location
             - For Chroma: Database directory (default: "./chroma_db")
-        embeddings: Custom embeddings model (default: OpenAIEmbeddings from env)
+        embedding_provider: Embedding provider to use (default: "auto")
+            - "auto": Auto-detect (tries OpenAI → HuggingFace → Ollama)
+            - "openai": OpenAI embeddings (requires OPENAI_API_KEY and langchain-openai)
+            - "huggingface": HuggingFace local embeddings (requires sentence-transformers)
+            - "ollama": Ollama local embeddings (requires ollama package)
+        embeddings: Custom embeddings model (overrides embedding_provider if provided)
         storage_backend: RAGVersion storage backend
             - "auto": Auto-detect from environment (default)
             - "sqlite": Use local SQLite database
@@ -139,10 +251,10 @@ async def quick_start(
         enable_chunk_tracking=enable_chunk_tracking,
     )
 
-    # Step 2: Create embeddings (default: OpenAI from env)
+    # Step 2: Create embeddings (auto-detect or use specified provider)
     if embeddings is None:
-        logger.info("Creating OpenAI embeddings (requires OPENAI_API_KEY env var)...")
-        embeddings = OpenAIEmbeddings()
+        logger.info(f"Creating embeddings with provider: {embedding_provider}")
+        embeddings = _create_embeddings(embedding_provider)
 
     # Step 3: Create text splitter
     text_splitter = RecursiveCharacterTextSplitter(
